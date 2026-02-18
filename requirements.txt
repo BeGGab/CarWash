@@ -1,0 +1,12 @@
+aiogram==3.4.1
+fastapi
+uvicorn
+sqlalchemy
+asyncpg
+pydantic==2.4.1
+pydantic-settings
+python-dotenv
+yookassa
+qrcode
+Pillow
+redis
