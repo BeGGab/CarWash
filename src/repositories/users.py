@@ -1,0 +1,27 @@
+from typing import List, Optional
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.users import User
+
+
+class UserRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_id(self, **filter_by) -> Optional[User]:
+        query = select(User).options(joinedload(User.booking)).filter_by(**filter_by)
+        result = await self.session.execute(query)
+        return result.unique().scalar()
+
+    async def get_all(self, skip: int = 0, limit: int = 100, **filter_by) -> List[User]:
+        query = (
+            select(User)
+            .options(joinedload(User.booking))
+            .filter_by(**filter_by)
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.session.execute(query)
+        return result.scalars().unique().all()
