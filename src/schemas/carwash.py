@@ -1,12 +1,10 @@
 import re
 import uuid
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
-from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from typing import Optional
 
 from src.models.carwash import CarWash
-from src.schemas.validators import NotEmptyString, PhoneNumber, WorkingHours
 
 
 class SCarWashCreate(BaseModel):
@@ -14,10 +12,6 @@ class SCarWashCreate(BaseModel):
     address: str = Field(..., min_length=1, max_length=100)
     phone_number: str = Field(...)
     working_hours: dict = Field(...)
-    name: NotEmptyString = Field(..., max_length=50)
-    address: NotEmptyString = Field(..., max_length=100)
-    phone_number: PhoneNumber
-    working_hours: WorkingHours
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,11 +70,6 @@ class SCarWashUpdate(BaseModel):
     address: Optional[str] = Field(None, min_length=1, max_length=100)
     phone_number: Optional[str] = Field(None)
     working_hours: Optional[dict] = Field(None)
-class SCarWashUpdate(SCarWashCreate):
-    name: Optional[NotEmptyString] = Field(None, max_length=50)
-    address: Optional[NotEmptyString] = Field(None, max_length=100)
-    phone_number: Optional[PhoneNumber] = None
-    working_hours: Optional[WorkingHours] = None
 
     model_config = ConfigDict(from_attributes=True)
 

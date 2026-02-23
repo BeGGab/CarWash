@@ -10,8 +10,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-metadata = sa.MetaData()
-
 
 class CarWash(Base):
     __tablename__ = "car_washes"
@@ -20,12 +18,12 @@ class CarWash(Base):
     name: Mapped[uniq_str_an]
     address: Mapped[uniq_str_an]
     phone_number: Mapped[uniq_str_an]
-    working_hours: Mapped[JSONB]
+    working_hours: Mapped[dict] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(onupdate=datetime.now, nullable=True)
 
-    bays: Mapped[List"WashBay"] = relationship(back_populates="car_wash",
+    bays: Mapped[List["WashBay"]] = relationship(back_populates="car_wash",
                                                 cascade="all, delete-orphan")
     time_slots: Mapped[List["TimeSlot"]] = relationship(
         back_populates="car_wash", cascade="all, delete-orphan")

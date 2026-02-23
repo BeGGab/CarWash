@@ -10,8 +10,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-metadata = sa.MetaData()
-
 
 class WashBay(Base):
     __tablename__ = "wash_bays"

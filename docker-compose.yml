@@ -3,11 +3,10 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: BOT_DB
     environment:
-      POSTGRES_USER: carwash
-      POSTGRES_DB: carwash
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
       POSTGRES_PASSWORD: 123456
     ports:
       - 5432:5432
-    restart: always
+

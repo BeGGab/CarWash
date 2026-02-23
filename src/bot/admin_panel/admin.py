@@ -1,89 +1,113 @@
-import asyncio
 import logging
-import aiosqlite
-from datetime import datetime, timedelta
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Router, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
-@dp.message(Command("start"))
+
+from src.schemas.carwash import SCarWashCreate
+from src.services.carwash import (
+    create_carwash_service,
+    get_all_carwashes_service,
+    delete_carwash_service,
+    get_statistics_service,
+)
+
+
+admin_router = Router()
+
+
+class AdminStates(StatesGroup):
+    add_wash_name = State()
+
+
+@admin_router.message(Command("start"))
 async def cmd_start(msg: types.Message):
-    kb = await get_main_keyboard(msg.from_user.id)
+    # TODO: Заменить на реальную клавиатуру
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Админ-панель", callback_data="admin_menu")]
+        ]
+    )
     await msg.answer("🚿 Добро пожаловать в систему бронирования!", reply_markup=kb)
 
-# --- Админ: добавить мойку ---
-@dp.callback_query(lambda c: c.data == "add_wash")
+
+async def get_admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить мойку", callback_data="add_wash")],
+            [InlineKeyboardButton(text="➖ Удалить мойку", callback_data="del_wash")],
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+        ]
+    )
+
+
+# Для Админа: добавить мойку
+@admin_router.callback_query(lambda c: c.data == "add_wash")
 async def add_wash_start(call: types.CallbackQuery, state: FSMContext):
     await call.message.answer("📝 Введите название мойки:")
-    await state.set_state(States.add_wash)
+    await state.set_state(AdminStates.add_wash_name)
     await call.answer()
 
-@dp.message(States.add_wash)
-async def add_wash_done(msg: types.Message, state: FSMContext):
-    try:
-        await db_query("INSERT INTO car_washes(name) VALUES (?)", (msg.text,))
-        wash = await db_query("SELECT id FROM car_washes WHERE name=?", (msg.text,), fetch_one=True)
-        if wash:
-            await create_slots_for_wash(wash[0])  # Автоматически создаем слоты на 30 дней
-        await msg.answer(f"✅ Мойка '{msg.text}' добавлена\nСозданы слоты на 30 дней вперед")
-    except:
-        await msg.answer("❌ Такая мойка уже есть")
-    
-    await state.clear()
-    kb = await get_main_keyboard(msg.from_user.id)
-    await msg.answer("Главное меню:", reply_markup=kb)
 
-# --- Админ: удалить мойку ---
-@dp.callback_query(lambda c: c.data == "del_wash")
-async def del_wash_start(call: types.CallbackQuery):
-    washes = await db_query("SELECT id, name FROM car_washes", fetch_all=True)
+@admin_router.message(AdminStates.add_wash_name)
+async def add_wash_done(msg: types.Message, state: FSMContext, session: AsyncSession):
+    try:
+        data = SCarWashCreate(name=msg.text, address="Не указан", location="0,0")
+        await create_carwash_service(data, session)
+        await msg.answer(f"✅ Мойка '{msg.text}' добавлена.")
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении мойки: {e}")
+        await msg.answer(f"❌ Ошибка: {e}")
+
+    await state.clear()
+    await msg.answer("Админ-панель:", reply_markup=await get_admin_keyboard())
+
+
+# Для Админа: удалить мойку
+@admin_router.callback_query(lambda c: c.data == "del_wash")
+async def del_wash_start(call: types.CallbackQuery, session: AsyncSession):
+    washes = await get_all_carwashes_service(session)
     if not washes:
         await call.message.answer("❌ Нет моек для удаления")
         return await call.answer()
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=name, callback_data=f"del_{id}")] for id, name in washes
-    ] + [[InlineKeyboardButton(text="🔙 Назад", callback_data="back")]])
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=w.name, callback_data=f"del_{w.id}")]
+            for w in washes
+        ]
+        + [[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_menu")]]
+    )
     await call.message.answer("Выберите мойку для удаления:", reply_markup=kb)
     await call.answer()
 
-@dp.callback_query(lambda c: c.data.startswith("del_"))
-async def del_wash_done(call: types.CallbackQuery):
-    wash_id = int(call.data.split("_")[1])
-    await db_query("DELETE FROM car_washes WHERE id=?", (wash_id,))
+
+@admin_router.callback_query(lambda c: c.data.startswith("del_"))
+async def del_wash_done(call: types.CallbackQuery, session: AsyncSession):
+    wash_id = call.data.split("_")[1]
+    await delete_carwash_service(wash_id, session)
     await call.message.answer("✅ Мойка удалена")
-    kb = await get_main_keyboard(call.from_user.id)
-    await call.message.answer("Главное меню:", reply_markup=kb)
+    await call.message.answer("Админ-панель:", reply_markup=await get_admin_keyboard())
     await call.answer()
 
-# --- Статистика ---
-@dp.callback_query(lambda c: c.data == "stats")
-async def show_stats(call: types.CallbackQuery):
-    washes = await db_query("SELECT COUNT(*) FROM car_washes", fetch_one=True)
-    total = await db_query("SELECT COUNT(*) FROM slots", fetch_one=True)
-    booked = await db_query("SELECT COUNT(*) FROM slots WHERE user_id IS NOT NULL", fetch_one=True)
-    
-    washes = washes[0] if washes else 0
-    total = total[0] if total else 0
-    booked = booked[0] if booked else 0
-    
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_slots = await db_query("SELECT COUNT(*) FROM slots WHERE date=?", (today,), fetch_one=True)
-    today_booked = await db_query("SELECT COUNT(*) FROM slots WHERE date=? AND user_id IS NOT NULL", 
-                                 (today,), fetch_one=True)
-    
-    today_slots = today_slots[0] if today_slots else 0
-    today_booked = today_booked[0] if today_booked else 0
-    percent = (booked/total*100) if total > 0 else 0
-    
+
+#  Статистика
+@admin_router.callback_query(lambda c: c.data == "stats")
+async def show_stats(call: types.CallbackQuery, session: AsyncSession):
+    stats = await get_statistics_service(session)
+    percent = (
+        (stats["confirmed_bookings"] / stats["total_bookings"] * 100)
+        if stats["total_bookings"] > 0
+        else 0
+    )
+
     text = f"""📊 Статистика:
-🏢 Моек: {washes}
-📅 Всего слотов: {total}
-✅ Занято: {booked} ({percent:.1f}%)
-📅 Сегодня: {today_slots} слотов, {today_booked} занято"""
-    
+🏢 Всего моек: {stats["carwashes_count"]}
+📅 Всего бронирований: {stats["total_bookings"]}
+✅ Подтверждено: {stats["confirmed_bookings"]} ({percent:.1f}%)"""
+
     await call.message.answer(text)
     await call.answer()

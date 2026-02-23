@@ -10,13 +10,12 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-metadata = sa.MetaData()
-
 
 class Booking(Base):
     __tablename__ = "bookings"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    telegram_id: Mapped[int] = mapped_column(sa.BigInteger, nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     car_wash_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("car_washes.id", ondelete="CASCADE"), nullable=False)
     wash_bay_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("wash_bays.id", ondelete="CASCADE"), nullable=False)

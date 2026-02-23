@@ -1,19 +1,25 @@
 import logging
-from fastapi import FastAPI, Request
-from starlette.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+import asyncio
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse # Это не используется для default_response_class
 
-from src.core.config_logging import setup_logging
-from src.exception.exception_handlers import setup_exception_handlers
+from src.routers.v1.carwash import router as carwash_router
+from src.routers.v1.booking import router as booking_router
+from src.routers.v1.payment import router as payment_router
 from src.routers.v1.user import router as user_router
-from src.routers.v1.author import router as author_router
-from src.routers.v1.student import router as student_router
-from src.routers.v1.courses import router as courses_router
-
-
-setup_logging()
+from src.routers.v1.washtype import router as washtype_router
+from src.bot.main import main as run_bot
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    bot_task = asyncio.create_task(run_bot())
+    yield
+    bot_task.cancel()
 
 
 def get_app() -> FastAPI:
@@ -25,24 +31,42 @@ def get_app() -> FastAPI:
     :return: application.
     """
     app = FastAPI(
+        title="CarWash API",
+        description="API для агрегатора автомоек с бронированием и предоплатой",
+        version="1.0.0",
         docs_url="/docs",
         openapi_url="/openapi.json",
         default_response_class=JSONResponse,
+        lifespan=lifespan,
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[],  # Указывайте здесь домены вашего фронтенда
+        # Добавляем явные адреса для локальной разработки и ngrok
+        allow_origins=[
+            "http://localhost:3000",  # Стандартный порт React
+            "http://localhost:5173",  # Стандартный порт Vite
+            # ВАЖНО: Добавьте сюда ваш ngrok URL для тестов в Telegram
+            "https://c7c1-144-31-207-241.ngrok-free.app" # <-- ВАША NGROK ССЫЛКА
+        ],
         allow_credentials=True,
-        allow_origin_regex=r"http://localhost:.*",  # Для локальной разработки
+        # Регулярное выражение для поддержки всех поддоменов Telegram
+        allow_origin_regex=r"https://.*\.telegram\.org",
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    logger.info("Запуск приложения")
+
+    
+    logger.info("Запуск CarWash API")
+    
+    app.include_router(carwash_router)
+    app.include_router(booking_router)
+    app.include_router(payment_router)
     app.include_router(user_router)
-    app.include_router(author_router)
-    app.include_router(student_router)
-    app.include_router(courses_router)
-    setup_exception_handlers(app)
+    app.include_router(washtype_router)
+    
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy", "service": "carwash-api"}
 
     return app

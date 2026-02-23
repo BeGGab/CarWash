@@ -10,7 +10,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-metadata = sa.MetaData()
 
 
 class WashType(Base):

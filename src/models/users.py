@@ -10,24 +10,23 @@ from src.core.db import Base, uniq_str_an
 
 
 
-metadata = sa.MetaData()
-
 
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    telegram_id: Mapped[int] = mapped_column(unique=True, nullable=True)
     username: Mapped[uniq_str_an]
     email: Mapped[uniq_str_an]
     first_name: Mapped[uniq_str_an]
-    last_name: Mapped[uniq_str_an] = mapped_column(sa.Text(50))
+    last_name: Mapped[uniq_str_an] = mapped_column(sa.String(50))
     phone_number: Mapped[uniq_str_an]
     is_verified: Mapped[bool] = mapped_column(default=False)
     last_visit: Mapped[datetime] = mapped_column(default=datetime.now)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(onupdate=datetime.now, nullable=True)
     
-    booking: Mapped[List["Booking"]] = relationship(back_populates="user")
+    bookings: Mapped[List["Booking"]] = relationship(back_populates="user")
     
 
     def __repr__(self):
