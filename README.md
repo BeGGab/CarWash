@@ -87,7 +87,7 @@ uvicorn src.application:get_app --host 0.0.0.0 --port 8000 --factory --reload
 
 # 4. Запустите Telegram-бота (во втором терминале)
 #    Убедитесь, что в .env установлен BOT_MODE=polling
-python -m src.bot.main
+# Он запускаеться вместе с FASTAPI в пункте № 3
 
 # 5. Запустите Mini App (в третьем терминале)
 cd webapp
