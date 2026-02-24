@@ -51,7 +51,7 @@ class Booking(Base):
     notes: Mapped[str] = mapped_column(nullable=True)
     cancellation_reason: Mapped[str] = mapped_column(nullable=True)
 
-    user: Mapped["User"] = relationship(back_populates="booking")
+    user: Mapped["User"] = relationship(back_populates="bookings")
     car_wash: Mapped["CarWash"] = relationship(back_populates="booking")
     wash_bay: Mapped["WashBay"] = relationship(back_populates="bookings")
     time_slot: Mapped["TimeSlot"] = relationship(back_populates="booking")

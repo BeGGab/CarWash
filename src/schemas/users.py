@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import datetime
 from pydantic import (
     BaseModel,
     Field,
@@ -31,10 +32,10 @@ class SPhoneVerification(BaseModel):
 class SUserCreate(BaseModel):
     telegram_id: int = Field(...)
     username: str = Field(..., min_length=5, max_length=16)
-    email: EmailStr
+    email: Optional[EmailStr] = Field(None)
     first_name: Optional[str] = Field(None, min_length=1, max_length=50)
     last_name: Optional[str] = Field(None, min_length=1, max_length=50)
-    phone_number: SPhoneVerification = Field(None)
+    phone_number: str = Field(...)
     is_verified: bool = Field(False)
 
     model_config = ConfigDict(from_attributes=True)
@@ -48,12 +49,13 @@ class SUserCreate(BaseModel):
             )
         return values
 
-    @field_validator("email", mode="before")
+    @field_validator("phone_number", mode="before")
     @classmethod
-    def validate_email(cls, values: str) -> str:
-        if not values or values == "":
-            return ValueError(f"Email - не должен быть пустой строкой")
+    def validate_phone_number(cls, values: str) -> str:
+        if not re.match(r"^\+7\d{10}$", values):
+            values = "+7" + values[1:]
         return values
+    
 
     def to_orm_model(self) -> User:
         user = User(**self.model_dump())
@@ -103,14 +105,14 @@ class SUserResponse(BaseModel):
     id: uuid.UUID = Field(...)
     telegram_id: Optional[int] = Field(None)
     username: str
-    email: EmailStr
+    email: Optional[EmailStr]
     first_name: Optional[str]
     last_name: Optional[str]
     phone_number: str
     is_verified: bool
     total_bookings: int = 0
     completed_bookings: int = 0
-    created_at: str
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

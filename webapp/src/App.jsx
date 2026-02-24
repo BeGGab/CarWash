@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import './App.css';
 
 // URL вашего API. Замените, если он отличается.
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'https://0f7a-209-127-202-171.ngrok-free.app/api/v1';
 
 // Получаем объект WebApp из глобального window
 const tg = window.Telegram.WebApp;
@@ -23,7 +23,7 @@ function App() {
         }
 
         // Отправляем POST-запрос на наш бэкенд для аутентификации/получения пользователя
-        const response = await fetch(`${API_BASE_URL}/users/me`, {
+        const response = await fetch(`${API_BASE_URL}/users/telegram/auth`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -33,8 +33,14 @@ function App() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`);
+          // Попытаемся прочитать тело ответа как текст, чтобы избежать ошибки парсинга JSON
+          const errorText = await response.text();
+          try {
+            const errorData = JSON.parse(errorText);
+            throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`);
+          } catch (e) {
+            throw new Error(`Ошибка сервера: ${response.status}. Ответ: ${errorText}`);
+          }
         }
 
         const userData = await response.json();

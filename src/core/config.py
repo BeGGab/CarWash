@@ -23,3 +23,6 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+        env_file_encoding = 'utf-8'
+        case_sensitive = False
+

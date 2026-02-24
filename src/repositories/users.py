@@ -7,10 +7,12 @@ from src.models.users import User
 
 
 class UserRepository:
+    model = User
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_id(self, **filter_by) -> Optional[User]:
+    async def get_one_or_none(self, **filter_by) -> Optional[User]:
         query = select(User).options(selectinload(User.bookings)).filter_by(**filter_by)
         result = await self.session.execute(query)
         return result.scalar_one_or_none()

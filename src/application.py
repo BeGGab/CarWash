@@ -47,7 +47,7 @@ def get_app() -> FastAPI:
             "http://localhost:3000",  # Стандартный порт React
             "http://localhost:5173",  # Стандартный порт Vite
             # ВАЖНО: Добавьте сюда ваш ngrok URL для тестов в Telegram
-            "https://c7c1-144-31-207-241.ngrok-free.app" # <-- ВАША NGROK ССЫЛКА
+            "https://0f7a-209-127-202-171.ngrok-free.app" # <-- ВАША NGROK ССЫЛКА
         ],
         allow_credentials=True,
         # Регулярное выражение для поддержки всех поддоменов Telegram

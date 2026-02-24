@@ -8,6 +8,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from src.core.db import async_session_maker 
+from src.bot.utils.db import DbSessionMiddleware 
 from src.core.config import Settings
 from src.bot.handlers import user_router, booking_router, admin_wash_router
 from src.bot.admin_panel.admin import admin_router as system_admin_router 
@@ -40,6 +42,9 @@ async def main():
     setup_user_config(admin_ids, webapp_url)
     setup_booking_config(admin_ids, webapp_url)
     setup_admin_config(admin_ids)
+    
+    
+    dp.update.middleware(DbSessionMiddleware(session_pool=async_session_maker))
     
     dp.include_router(user_router)
     dp.include_router(booking_router)

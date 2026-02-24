@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import sqlalchemy as sa
+from typing import Optional
 from typing import Annotated, List, AsyncGenerator
 from sqlalchemy import Text, String, ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -12,7 +13,7 @@ from src.core.config import Settings
 
 settings = Settings()
 engine = create_async_engine(str(settings.postgres_url))
-async_session_maker = async_sessionmaker(engine,class_=AsyncSession, expire_on_commit=False)
+async_session_maker = async_sessionmaker(engine,class_=AsyncSession, expire_on_commit=True, autoflush=False, autocommit=False)
 
 
 uniq_str_an = Annotated[str, mapped_column(Text, unique=True, nullable=False)]
@@ -28,7 +29,7 @@ class BaseServiceModel(AsyncAttrs):
     """Базовый класс для таблиц сервиса."""
 
     @classmethod
-    def on_conflict_constrauuid(cls) -> tuple | None:
+    def on_conflict_constrauuid(cls) -> Optional[tuple]:
         return None
     
     def to_dict(self) -> dict:

@@ -7,6 +7,8 @@ from aiogram.fsm.state import State, StatesGroup
 class UserStates(StatesGroup):
     """Состояния пользователя"""
     # Регистрация
+    reg_name = State()
+    reg_phone = State()
     waiting_for_phone = State()
     waiting_for_name = State()
     
