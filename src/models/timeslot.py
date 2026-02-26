@@ -10,7 +10,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-
 class TimeSlot(Base):
     __tablename__ = "time_slots"
 
@@ -26,5 +25,6 @@ class TimeSlot(Base):
 
     car_wash: Mapped["CarWash"] = relationship(back_populates="time_slots")
     wash_bay: Mapped["WashBay"] = relationship(back_populates="time_slots")
-    booking: Mapped[List["Booking"]] = relationship(back_populates="time_slot", uselist=False)
-    
+    booking: Mapped[List["Booking"]] = relationship(
+        back_populates="time_slot", uselist=False
+    )

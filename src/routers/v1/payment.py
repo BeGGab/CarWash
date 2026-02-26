@@ -1,6 +1,7 @@
 """
 API роутер для работы с платежами
 """
+
 import uuid
 from typing import Optional
 
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/v1/payments", tags=["Payments"])
 
 # ==================== Эндпоинты ====================
 
+
 @router.post("/create", response_model=SPaymentResponse)
 async def create_payment(
     data: SPaymentCreate,
@@ -35,7 +37,7 @@ async def create_payment(
 ):
     """
     Создать платеж для бронирования
-    
+
     Возвращает URL для перенаправления на страницу оплаты
     """
     return await create_payment_service(data, gateway, session)
@@ -51,7 +53,7 @@ async def get_payment_status(
     return {
         "payment_id": payment_id,
         "status": payment_data["status"],
-        "paid": payment_data.get("paid", False)
+        "paid": payment_data.get("paid", False),
     }
 
 
@@ -63,7 +65,7 @@ async def payment_webhook(
 ):
     """
     Webhook для получения уведомлений от платежной системы
-    
+
     Обрабатывает события:
     - payment.succeeded - платеж успешен
     - payment.canceled - платеж отменен
@@ -80,7 +82,7 @@ async def create_refund(
 ):
     """
     Создать запрос на возврат средств
-    
+
     - Полный возврат при отмене за 2+ часа до начала
     - Частичный возврат при отмене за 1-2 часа (50%)
     - Без возврата при отмене менее чем за 1 час
@@ -90,11 +92,12 @@ async def create_refund(
 
 # ==================== Демо-эндпоинт для тестирования ====================
 
+
 @router.get("/demo-pay")
 async def demo_payment_page(payment_id: str = Query(...), amount: float = Query(...)):
     """
     Демо-страница оплаты для тестирования
-    
+
     В продакшене это будет страница ЮKassa
     """
     return {
@@ -102,7 +105,7 @@ async def demo_payment_page(payment_id: str = Query(...), amount: float = Query(
         "payment_id": payment_id,
         "amount": amount,
         "instructions": "Для подтверждения оплаты вызовите POST /api/v1/payments/demo-confirm",
-        "confirm_url": f"/api/v1/payments/demo-confirm?payment_id={payment_id}"
+        "confirm_url": f"/api/v1/payments/demo-confirm?payment_id={payment_id}",
     }
 
 
@@ -112,7 +115,7 @@ async def demo_confirm_payment(
 ):
     """
     Демо-подтверждение платежа
-    
+
     Эмулирует успешный webhook от ЮKassa
     """
     return await confirm_demo_payment_service(session)

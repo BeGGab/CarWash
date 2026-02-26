@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.carwash import CarWash
 from src.models.booking import Booking
+from src.models.washbay import WashBay
 
 from src.schemas.carwash import SCarWashCreate, SCarWashUpdate
+from src.schemas.washbay import SWashBayCreate
 
 
 class CarWashRepository:
@@ -52,6 +54,18 @@ class CarWashRepository:
         """Удалить автомойку."""
         await self.session.delete(carwash)
         await self.session.commit()
+
+    async def add_bay(self, carwash_id: uuid.UUID, data: SWashBayCreate) -> WashBay:
+        """Добавляет моечный бокс к автомойке."""
+        wash_bay = WashBay(
+            car_wash_id=carwash_id,
+            bay_number=data.bay_number,
+            bay_type=data.bay_type,
+        )
+        self.session.add(wash_bay)
+        await self.session.commit()
+        await self.session.refresh(wash_bay)
+        return wash_bay
 
     async def get_stats(self) -> dict:
         """Получить статистику."""

@@ -8,6 +8,7 @@ class DbSessionMiddleware(BaseMiddleware):
     """
     Middleware для передачи сессии SQLAlchemy в обработчики.
     """
+
     def __init__(self, session_pool: async_sessionmaker):
         super().__init__()
         self.session_pool = session_pool

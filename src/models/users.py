@@ -9,8 +9,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-
-
 class User(Base):
     __tablename__ = "users"
 
@@ -25,9 +23,8 @@ class User(Base):
     last_visit: Mapped[datetime] = mapped_column(default=datetime.now)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(onupdate=datetime.now, nullable=True)
-    
+
     bookings: Mapped[List["Booking"]] = relationship(back_populates="user")
-    
 
     def __repr__(self):
         return f"User(id={self.id}, username={self.username}, email={self.email})"

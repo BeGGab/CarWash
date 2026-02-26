@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
 
-from src.schemas.users import SUserCreate, SUserUpdate, SUserResponse, SPhoneVerification
+from src.schemas.users import (
+    SUserCreate,
+    SUserUpdate,
+    SUserResponse,
+    SPhoneVerification,
+)
 
 from src.repositories.users import UserRepository as user_repo
 from src.repositories.booking import BookingRepository as booking_repo
@@ -16,9 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 async def create_user(session: AsyncSession, user_data: SUserCreate) -> SUserResponse:
-    existing_user = await user_repo(session).get_one_or_none(telegram_id=int(user_data.telegram_id))
+    existing_user = await user_repo(session).get_one_or_none(
+        telegram_id=int(user_data.telegram_id)
+    )
     if existing_user:
-        logger.warning(f"Попытка создать уже существующего пользователя: {user_data.telegram_id}")
+        logger.warning(
+            f"Попытка создать уже существующего пользователя: {user_data.telegram_id}"
+        )
         return await find_user(session, telegram_id=int(user_data.telegram_id))
 
     new_user_orm = user_repo.model(**user_data.model_dump())
@@ -31,7 +40,7 @@ async def create_user(session: AsyncSession, user_data: SUserCreate) -> SUserRes
 
 
 async def verify_user(session: AsyncSession, data: SPhoneVerification):
-    user = await user_repo(session).get_one_or_none(telegram_id=data.telegram_id) 
+    user = await user_repo(session).get_one_or_none(telegram_id=data.telegram_id)
     if not user:
         logger.error(f"Пользователь не найден: {data}")
         raise HTTPException(detail="Пользователь не найден", status_code=404)
@@ -42,18 +51,18 @@ async def verify_user(session: AsyncSession, data: SPhoneVerification):
 
 
 async def find_user(session: AsyncSession, **filter_by) -> SUserResponse:
-    user = await user_repo(session).get_one_or_none(**filter_by) 
+    user = await user_repo(session).get_one_or_none(**filter_by)
     if not user:
         logger.error(f"Пользователь не найден: {filter_by}")
         raise HTTPException(detail="Пользователь не найден", status_code=404)
     total_booking = await booking_repo(session).statistic_total(user.id)
     completed_booking = await booking_repo(session).statistic_completed(user.id)
-    
+
     # Собираем ответ, включая статистику
     user_data_dict = user.__dict__
-    user_data_dict['total_bookings'] = total_booking
-    user_data_dict['completed_bookings'] = completed_booking
-    
+    user_data_dict["total_bookings"] = total_booking
+    user_data_dict["completed_bookings"] = completed_booking
+
     return SUserResponse.model_validate(user_data_dict, from_attributes=True)
 
 
@@ -67,9 +76,7 @@ async def find_all_users(
     return [SUserResponse.model_validate(user, from_attributes=True) for user in users]
 
 
-async def update_user(
-    session: AsyncSession, data: SUserUpdate
-) -> SUserResponse:
+async def update_user(session: AsyncSession, data: SUserUpdate) -> SUserResponse:
 
     user = await user_repo(session).get_one_or_none(telegram_id=data.telegram_id)
     if not user:
@@ -80,7 +87,7 @@ async def update_user(
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(user, key, value)
-        
+
     session.add(user)
     await session.flush()
     await session.refresh(user)

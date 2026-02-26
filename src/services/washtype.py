@@ -1,6 +1,7 @@
 """
 Сервисный слой для работы с типами мойки
 """
+
 import uuid
 
 from fastapi import HTTPException

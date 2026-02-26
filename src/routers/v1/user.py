@@ -23,14 +23,17 @@ from src.services.users import (
 from src.services.auth import get_or_create_user_by_init_data
 
 
-
 router = APIRouter(prefix="/api/v1/users", tags=["Users"])
 
 
-@router.post("/telegram/auth", summary="Аутентификация пользователя Mini App", status_code=status.HTTP_200_OK)
+@router.post(
+    "/telegram/auth",
+    summary="Аутентификация пользователя Mini App",
+    status_code=status.HTTP_200_OK,
+)
 async def telegram_auth(
     init_data: str = Header(..., alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session),
 ) -> SUserResponse:
     """
     Эндпоинт для аутентификации пользователя Mini App через Telegram Init Data.

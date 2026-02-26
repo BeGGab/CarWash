@@ -52,7 +52,9 @@ class BookingRepository:
         return wt_result.scalar_one_or_none()
 
     @staticmethod
-    def calculate_price(wash_type: WashType, discount: float = 0) -> tuple[float, float, float]:
+    def calculate_price(
+        wash_type: WashType, discount: float = 0
+    ) -> tuple[float, float, float]:
         """Расчет цены с учетом скидки"""
         price = wash_type.base_price
         discount_amount = price * (discount / 100)
@@ -66,11 +68,15 @@ class BookingRepository:
         hash_obj = hashlib.sha256(data.encode())
         return base64.urlsafe_b64encode(hash_obj.digest()[:16]).decode()
 
-    async def create_booking(self, data: SBookingCreate) -> tuple[Booking, TimeSlot, CarWash, WashType]:
+    async def create_booking(
+        self, data: SBookingCreate
+    ) -> tuple[Booking, TimeSlot, CarWash, WashType]:
         # 1. Проверяем доступность слота
         slot = await self.get_available_slot(data.time_slot_id)
         if not slot:
-            raise HTTPException(status_code=400, detail="Слот недоступен или уже забронирован")
+            raise HTTPException(
+                status_code=400, detail="Слот недоступен или уже забронирован"
+            )
 
         # 2. Проверяем автомойку
         carwash = await self.get_carwash(data.car_wash_id)
@@ -83,7 +89,9 @@ class BookingRepository:
             raise HTTPException(status_code=404, detail="Тип мойки не найден")
 
         # 4. Рассчитываем цену
-        price, discount_amount, final_price = self.calculate_price(wash_type, 0) # Скидка пока 0
+        price, discount_amount, final_price = self.calculate_price(
+            wash_type, 0
+        )  # Скидка пока 0
 
         # 5. Создаем бронирование
         booking = Booking(
@@ -105,7 +113,7 @@ class BookingRepository:
             status="pending_payment",
             payment_status="pending",
             expires_at=datetime.now() + timedelta(minutes=15),  # 15 минут на оплату
-            notes=data.notes
+            notes=data.notes,
         )
         self.session.add(booking)
 

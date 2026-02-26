@@ -10,8 +10,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-
-
 class WashType(Base):
     __tablename__ = "wash_types"
 

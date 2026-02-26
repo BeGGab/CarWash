@@ -59,7 +59,6 @@ class SUserCreate(BaseModel):
         if not re.match(r"^\+7\d{10}$", values):
             values = "+7" + values[1:]
         return values
-    
 
     def to_orm_model(self) -> User:
         user = User(**self.model_dump())

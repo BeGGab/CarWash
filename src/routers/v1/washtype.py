@@ -1,6 +1,7 @@
 """
 API роутер для работы с типами мойки
 """
+
 import uuid
 from typing import Optional, List
 

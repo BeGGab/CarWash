@@ -4,6 +4,7 @@
 shop_id/secret_key уже берётся из Settings, чтобы при деплое можно было
 просто подставить боевые данные.
 """
+
 import uuid
 import hashlib
 import hmac
@@ -73,9 +74,7 @@ class PaymentGatewayService:
 
     def verify_signature(self, body: bytes, signature: str) -> bool:
         """Проверить подпись webhook."""
-        expected = hmac.new(
-            self.secret_key.encode(), body, hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(self.secret_key.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
 
 

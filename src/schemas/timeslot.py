@@ -9,8 +9,6 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator, model_valida
 from src.models.timeslot import TimeSlot
 
 
-
-
 class STimeCreate(BaseModel):
     carwash_id: uuid.UUID = Field(...)
     date: datetime = Field(...)

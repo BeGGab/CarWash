@@ -10,17 +10,26 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-
 class Booking(Base):
     __tablename__ = "bookings"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     telegram_id: Mapped[int] = mapped_column(sa.BigInteger, nullable=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    car_wash_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("car_washes.id", ondelete="CASCADE"), nullable=False)
-    wash_bay_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("wash_bays.id", ondelete="CASCADE"), nullable=False)
-    time_slot_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("time_slots.id", ondelete="CASCADE"), nullable=False)
-    wash_type_id: Mapped[uuid.UUID] = mapped_column(sa.ForeignKey("wash_types.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    car_wash_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("car_washes.id", ondelete="CASCADE"), nullable=False
+    )
+    wash_bay_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("wash_bays.id", ondelete="CASCADE"), nullable=False
+    )
+    time_slot_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("time_slots.id", ondelete="CASCADE"), nullable=False
+    )
+    wash_type_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("wash_types.id"), nullable=False
+    )
 
     guest_phone: Mapped[str]
     guest_name: Mapped[str]
@@ -33,7 +42,6 @@ class Booking(Base):
     start_time: Mapped[datetime] = mapped_column(sa.Time, nullable=False)
     end_time: Mapped[datetime] = mapped_column(sa.Time, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-
 
     price: Mapped[float] = mapped_column(sa.Float, nullable=False)
     discount: Mapped[float] = mapped_column(sa.Float, default=0)

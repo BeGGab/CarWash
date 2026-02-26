@@ -44,7 +44,7 @@ def get_app() -> FastAPI:
         default_response_class=JSONResponse,
         lifespan=lifespan,
     )
-    
+
     app.add_middleware(
         CORSMiddleware,
         # Добавляем явные адреса для локальной разработки, ngrok и webapp

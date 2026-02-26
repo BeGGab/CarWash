@@ -233,7 +233,7 @@ async def cancel_booking_service(
     return {
         "status": "cancelled",
         "booking_id": str(booking_id),
-        "refund_status": "processing",  
+        "refund_status": "processing",
     }
 
 

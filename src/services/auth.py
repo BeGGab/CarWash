@@ -11,7 +11,7 @@ from src.core.config import Settings
 async def get_or_create_user_by_init_data(
     init_data: str, session: AsyncSession
 ) -> SUserResponse:
-    
+
     if not validate_init_data(init_data, Settings().bot_token):
         raise HTTPException(status_code=401, detail="Invalid Telegram Init Data")
 
@@ -19,7 +19,9 @@ async def get_or_create_user_by_init_data(
     telegram_user_data = parsed_data.get("user")
 
     if not telegram_user_data or not telegram_user_data.get("id"):
-        raise HTTPException(status_code=400, detail="Telegram user ID not found in init data")
+        raise HTTPException(
+            status_code=400, detail="Telegram user ID not found in init data"
+        )
 
     telegram_id = telegram_user_data["id"]
     raw_username = telegram_user_data.get("username")
@@ -37,6 +39,5 @@ async def get_or_create_user_by_init_data(
         is_verified=False,
     )
 
-    
     user = await create_user(session, user_create_data)
     return user

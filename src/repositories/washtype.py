@@ -1,6 +1,7 @@
 """
 Репозиторий для работы с типами мойки
 """
+
 import uuid
 from typing import List, Optional
 
@@ -39,9 +40,7 @@ class WashTypeRepository:
         await self.session.refresh(wash_type)
         return wash_type
 
-    async def update(
-        self, wash_type: WashType, data: SWashTypeUpdate
-    ) -> WashType:
+    async def update(self, wash_type: WashType, data: SWashTypeUpdate) -> WashType:
         """Обновить тип мойки."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():

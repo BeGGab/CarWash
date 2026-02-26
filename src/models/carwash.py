@@ -10,7 +10,6 @@ from datetime import datetime
 from src.core.db import Base, uniq_str_an
 
 
-
 class CarWash(Base):
     __tablename__ = "car_washes"
 
@@ -23,8 +22,10 @@ class CarWash(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(onupdate=datetime.now, nullable=True)
 
-    bays: Mapped[List["WashBay"]] = relationship(back_populates="car_wash",
-                                                cascade="all, delete-orphan")
+    bays: Mapped[List["WashBay"]] = relationship(
+        back_populates="car_wash", cascade="all, delete-orphan"
+    )
     time_slots: Mapped[List["TimeSlot"]] = relationship(
-        back_populates="car_wash", cascade="all, delete-orphan")
+        back_populates="car_wash", cascade="all, delete-orphan"
+    )
     booking: Mapped[List["Booking"]] = relationship(back_populates="car_wash")

@@ -1,6 +1,7 @@
 """
 Сервисный слой для работы с платежами.
 """
+
 import uuid
 from typing import Optional
 from datetime import datetime
@@ -163,7 +164,9 @@ async def confirm_demo_payment_service(session: AsyncSession) -> dict:
     repo = BookingRepository(session)
     booking = await repo.find_pending_payment()
     if not booking:
-        raise HTTPException(status_code=404, detail="Бронирование для оплаты не найдено")
+        raise HTTPException(
+            status_code=404, detail="Бронирование для оплаты не найдено"
+        )
 
     booking.payment_status = "paid"
     booking.status = "confirmed"

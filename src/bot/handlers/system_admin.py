@@ -1,34 +1,23 @@
 """
-Обработчики для администратора автомойки
+Обработчики для системного администратора.
 """
-import uuid
+
 import logging
 import httpx
-from datetime import date
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.bot.states import AdminWashStates, SystemAdminStates
-
-from bot.utils.api_client import ApiClient
-
+from src.bot.states import AdminWashStates
+from src.bot.utils.api_client import ApiClient
 from src.bot.keyboards.keyboards import get_main_keyboard, get_back_keyboard
 from src.core.config import Settings
-from src.services.booking import (
-    get_carwash_bookings_service,
-    start_wash_service,
-    complete_wash_service,
-    verify_qr_service,
-)
-from src.services.carwash import get_statistics_service
 
 settings = Settings()
 
 logger = logging.getLogger(__name__)
-router = Router(name="admin_wash")
+router = Router(name="system_admin")
 
 
 # ==================== Системный админ ====================
@@ -145,7 +134,10 @@ async def add_wash_hours(message: Message, state: FSMContext, api_client: ApiCli
 
 @router.callback_query(F.data == "del_wash")
 async def del_wash_start(
-    callback: CallbackQuery, state: FSMContext, settings: Settings, api_client: ApiClient
+    callback: CallbackQuery,
+    state: FSMContext,
+    settings: Settings,
+    api_client: ApiClient,
 ):
     """Удаление мойки"""
     if callback.from_user.id not in settings.admins_id:
@@ -200,7 +192,10 @@ async def del_wash_start(
 
 @router.callback_query(F.data.startswith("del_"))
 async def del_wash_confirm(
-    callback: CallbackQuery, state: FSMContext, settings: Settings, api_client: ApiClient
+    callback: CallbackQuery,
+    state: FSMContext,
+    settings: Settings,
+    api_client: ApiClient,
 ):
     """Подтверждение удаления"""
     wash_id = callback.data.replace("del_", "")
@@ -230,186 +225,24 @@ async def del_wash_confirm(
 async def show_stats(
     callback: CallbackQuery,
     state: FSMContext,
-    settings: Settings,
-    session: AsyncSession,
+    api_client: ApiClient,
 ):
     """Показать статистику"""
     if callback.from_user.id not in settings.admins_id:
         await callback.answer("❌ Нет доступа", show_alert=True)
         return
 
-    # Получаем агрегированную статистику из сервиса автомоек
-    stats = await get_statistics_service(session)
+    stats = await api_client.get_system_stats()
 
     text = f"""
 📊 <b>Статистика системы</b>
 
-🏢 Всего моек: {stats['carwashes_count']}
-📅 Всего бронирований: {stats['total_bookings']}
+🏢 Всего моек: {stats.get("carwashes_count", 0)}
+📅 Всего бронирований: {stats.get("total_bookings", 0)}
 
-⭐ Подтверждённых бронирований: {stats['confirmed_bookings']}
+⭐ Подтверждённых бронирований: {stats.get("confirmed_bookings", 0)}
 """
 
     kb = get_back_keyboard("back_to_menu")
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await callback.answer()
-
-
-# ==================== Админ мойки ====================
-
-
-@router.callback_query(F.data.startswith("wa_today_"))
-async def wash_admin_today(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-):
-    """Брони на сегодня для админа мойки"""
-    carwash_id = callback.data.replace("wa_today_", "")
-
-    # Получаем брони автомойки на сегодня через сервис
-    today = date.today()
-    bookings_page = await get_carwash_bookings_service(
-        carwash_id=uuid.UUID(carwash_id),
-        date_from=today,
-        date_to=today,
-        status=None,
-        page=1,
-        per_page=50,
-        session=session,
-    )
-
-    status_icons = {"pending_payment": "⏳", "confirmed": "✅", "in_progress": "🔄", "completed": "✔️"}
-
-    if not bookings_page.items:
-        lines = ["📋 <b>На сегодня бронирований нет.</b>"]
-    else:
-        lines = ["📋 <b>Брони на сегодня:</b>\n"]
-        for b in bookings_page.items:
-            icon = status_icons.get(b.status, "❓")
-            lines.append(f"{icon} {b.start_time.strftime('%H:%M')} - {b.car_plate}")
-
-    kb = get_back_keyboard("back_to_menu")
-    await callback.message.edit_text(
-        "\n".join(lines), reply_markup=kb, parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("wa_scan_"))
-async def wash_admin_scan(callback: CallbackQuery, state: FSMContext):
-    """Сканирование QR для админа мойки"""
-    carwash_id = callback.data.replace("wa_scan_", "")
-
-    await state.set_state(AdminWashStates.scanning_qr)
-    await state.update_data(carwash_id=carwash_id)
-
-    await callback.message.edit_text(
-        "📷 <b>Сканирование QR-кода</b>\n\n"
-        "Отправьте фото QR-кода клиента или введите код вручную:",
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
-@router.message(AdminWashStates.scanning_qr)
-async def process_qr_scan(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-):
-    """Обработка QR-кода"""
-    qr_code = message.text
-
-    # Проверяем QR-код через сервис бронирований
-    result = await verify_qr_service(
-        booking_id=uuid.UUID(qr_code.split(":")[0]) if ":" in qr_code else uuid.UUID(qr_code),
-        qr_code=qr_code,
-        session=session,
-    )
-
-    booking = result.get("booking") if result.get("valid") else None
-
-    if booking:
-        text = f"""
-✅ <b>QR-код подтверждён!</b>
-
-👤 {booking["guest_name"]}
-🚗 {booking["car_model"]} ({booking["car_plate"]})
-🧽 Статус: {booking["status"]}
-"""
-
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="▶️ Начать мойку",
-                        callback_data=f"start_wash_{booking['id']}",
-                    )
-                ],
-                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")],
-            ]
-        )
-
-        await state.clear()
-        await message.answer(text, reply_markup=kb, parse_mode="HTML")
-    else:
-        await message.answer("❌ QR-код не найден или недействителен")
-
-
-@router.callback_query(F.data.startswith("start_wash_"))
-async def start_wash(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-):
-    """Начать мойку"""
-    booking_id = callback.data.replace("start_wash_", "")
-
-    # Обновляем статус бронирования через сервис
-    await start_wash_service(uuid.UUID(booking_id), session)
-
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Завершить мойку",
-                    callback_data=f"complete_wash_{booking_id}",
-                )
-            ],
-        ]
-    )
-
-    await callback.message.edit_text(
-        f"🔄 <b>Мойка #{booking_id[:6]} начата</b>\n\n"
-        "Нажмите 'Завершить' по окончании работы.",
-        reply_markup=kb,
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("complete_wash_"))
-async def complete_wash(
-    callback: CallbackQuery,
-    state: FSMContext,
-    settings: Settings,
-    session: AsyncSession,
-):
-    """Завершить мойку"""
-    booking_id = callback.data.replace("complete_wash_", "")
-
-    # Завершаем мойку через сервис
-    await complete_wash_service(uuid.UUID(booking_id), session)
-
-    await callback.message.edit_text(
-        f"✅ <b>Мойка #{booking_id[:6]} завершена!</b>", parse_mode="HTML"
-    )
-
-    kb = get_main_keyboard(callback.from_user.id, settings.admins_id)
-    await callback.message.answer("Главное меню:", reply_markup=kb)
     await callback.answer()

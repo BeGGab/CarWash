@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Основные настройки
-    postgres_url: PostgresDsn = Field(env='postgres_url')
+    postgres_url: PostgresDsn = Field(env="postgres_url")
     bot_token: str
     admins_id: List[int]
 
@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     yookassa_secret_key: str
 
     class Config:
-        env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
-        env_file_encoding = 'utf-8'
+        env_file = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"
+        )
+        env_file_encoding = "utf-8"
         case_sensitive = False
