@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 async def create_user(session: AsyncSession, user_data: SUserCreate) -> SUserResponse:
-    existing_user = await user_repo(session).get_one_or_none(telegram_id=user_data.telegram_id)
+    existing_user = await user_repo(session).get_one_or_none(telegram_id=int(user_data.telegram_id))
     if existing_user:
         logger.warning(f"Попытка создать уже существующего пользователя: {user_data.telegram_id}")
-        return await find_user(session, telegram_id=user_data.telegram_id)
+        return await find_user(session, telegram_id=int(user_data.telegram_id))
 
     new_user_orm = user_repo.model(**user_data.model_dump())
     session.add(new_user_orm)
@@ -27,7 +27,7 @@ async def create_user(session: AsyncSession, user_data: SUserCreate) -> SUserRes
     await session.refresh(new_user_orm)
     logger.info(f"Создан новый пользователь: {new_user_orm.telegram_id}")
 
-    return  SUserResponse.model_validate(new_user_orm, from_attributes=True)
+    return await find_user(session, telegram_id=new_user_orm.telegram_id)
 
 
 async def verify_user(session: AsyncSession, data: SPhoneVerification):

@@ -5,17 +5,14 @@ from src.core.telegram_auth import validate_init_data, parse_init_data
 from src.schemas.users import SUserCreate, SUserResponse
 from src.services.users import create_user
 
+from src.core.config import Settings
+
 
 async def get_or_create_user_by_init_data(
     init_data: str, session: AsyncSession
 ) -> SUserResponse:
-    """
-    Сервисная функция для аутентификации пользователя по Telegram Init Data.
-    1. Валидирует и парсит init_data.
-    2. Извлекает данные пользователя.
-    3. Вызывает сервис для поиска или создания пользователя в БД.
-    """
-    if not validate_init_data(init_data):
+    
+    if not validate_init_data(init_data, Settings().bot_token):
         raise HTTPException(status_code=401, detail="Invalid Telegram Init Data")
 
     parsed_data = parse_init_data(init_data)
@@ -24,8 +21,22 @@ async def get_or_create_user_by_init_data(
     if not telegram_user_data or not telegram_user_data.get("id"):
         raise HTTPException(status_code=400, detail="Telegram user ID not found in init data")
 
-    user_create_data = SUserCreate.model_validate(telegram_user_data)
+    telegram_id = telegram_user_data["id"]
+    raw_username = telegram_user_data.get("username")
+    username = raw_username if raw_username else f"user_{telegram_id}"
 
-    # Сервис create_user уже содержит логику поиска или создания пользователя
+    last_name = telegram_user_data.get("last_name")
+
+    user_create_data = SUserCreate(
+        telegram_id=telegram_id,
+        username=username,
+        first_name=telegram_user_data.get("first_name") or "",
+        last_name=last_name if last_name else None,
+        email=None,
+        phone_number=None,
+        is_verified=False,
+    )
+
+    
     user = await create_user(session, user_create_data)
     return user

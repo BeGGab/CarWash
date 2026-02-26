@@ -54,7 +54,7 @@ postgres_url=postgresql+asyncpg://user:password@localhost:5432/carwash
 
 # Telegram Bot
 bot_token=YOUR_BOT_TOKEN
-admin_id=YOUR_TELEGRAM_ID
+admins_id=[YOUR_TELEGRAM_ID] # Можно указать несколько через запятую, например [123, 456]
 
 # Payment (YooKassa)
 YOOKASSA_SHOP_ID=your_shop_id
@@ -62,6 +62,7 @@ YOOKASSA_SECRET_KEY=your_secret_key
 
 # Mini App
 WEBAPP_URL=https://your-domain.com/webapp
+VITE_API_BASE_URL=https://your-api-domain.com/api/v1 # Для продакшена. Для разработки оставьте пустым.
 ```
 
 ### 2. Запуск с Docker

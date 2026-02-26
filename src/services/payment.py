@@ -69,9 +69,11 @@ async def process_webhook_service(
 ) -> dict:
     """Сервис для обработки webhook от платежной системы."""
     body = await request.body()
-    # signature = request.headers.get("X-Signature", "")
-    # if not gateway.verify_signature(body, signature):
-    #     raise HTTPException(status_code=400, detail="Invalid signature")
+    signature = request.headers.get("X-Signature", "")
+    # Если провайдер не прислал подпись — считаем, что это демо-режим и не блокируем запрос.
+    # В проде нужно гарантировать наличие подписи и выбрасывать ошибку.
+    if signature and not gateway.verify_signature(body, signature):
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     data = await request.json()
     event = data.get("event")

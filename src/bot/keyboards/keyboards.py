@@ -13,6 +13,7 @@ from aiogram.types import (
 )
 
 
+
 def is_admin(user_id: int, admin_ids: List[int]) -> bool:
     return user_id in admin_ids
 
@@ -22,7 +23,12 @@ def get_main_keyboard(user_id: int, admin_ids: List[int] = None, webapp_url: str
     buttons = []
     
     if webapp_url:
-        buttons.append([InlineKeyboardButton(text="🚗 Забронировать мойку", web_app=WebAppInfo(url=webapp_url))])
+        buttons.append([
+            InlineKeyboardButton(
+                text="🚗 Забронировать мойку",
+                web_app=WebAppInfo(url=f"{webapp_url}?action=book")
+            )
+        ])
     else:
         buttons.append([InlineKeyboardButton(text="🚗 Найти мойку", callback_data="find_wash")])
     
@@ -172,12 +178,21 @@ def get_confirm_cancel_keyboard(booking_id: str) -> InlineKeyboardMarkup:
     ]])
 
 
-def get_profile_keyboard(is_verified: bool = False) -> InlineKeyboardMarkup:
+def get_profile_keyboard(is_verified: bool = False, webapp_url: str | None = None) -> InlineKeyboardMarkup:
     buttons = []
     if not is_verified:
         buttons.append([InlineKeyboardButton(text="📱 Подтвердить телефон", callback_data="verify_phone")])
+
+    # Если указан webapp_url, используем Mini App для редактирования профиля,
+    # иначе остаёмся на callback "edit_profile" как запасной вариант.
+    edit_button_kwargs: dict[str, object] = {}
+    if webapp_url:
+        edit_button_kwargs["web_app"] = WebAppInfo(url=f"{webapp_url}?action=my")
+    else:
+        edit_button_kwargs["callback_data"] = "edit_profile"
+
     buttons.extend([
-        [InlineKeyboardButton(text="✏️ Редактировать", callback_data="edit_profile")],
+        [InlineKeyboardButton(text="✏️ Редактировать", **edit_button_kwargs)],
         [InlineKeyboardButton(text="🚗 Мои автомобили", callback_data="my_cars")],
         [InlineKeyboardButton(text="🔙 В меню", callback_data="back_to_menu")],
     ])

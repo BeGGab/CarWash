@@ -1,12 +1,16 @@
 """
 Сервис-шлюз для интеграции с внешней платежной системой (например, ЮKassa).
-В данном проекте используется заглушка для демонстрации.
+В данном проекте используется заглушка для демонстрации, но конфигурация
+shop_id/secret_key уже берётся из Settings, чтобы при деплое можно было
+просто подставить боевые данные.
 """
 import uuid
 import hashlib
 import hmac
 from datetime import datetime
 from typing import Optional
+
+from src.core.config import Settings
 
 
 class PaymentGatewayService:
@@ -15,9 +19,10 @@ class PaymentGatewayService:
     В продакшене здесь будет реальная интеграция с ЮKassa/Stripe/Т-Касса.
     """
 
-    def __init__(self, shop_id: str = None, secret_key: str = None):
+    def __init__(self, shop_id: str | None = None, secret_key: str | None = None):
         self.shop_id = shop_id or "demo_shop"
         self.secret_key = secret_key or "demo_secret"
+        # Для реальной интеграции можно будет вынести в настройки
         self.base_url = "https://api.yookassa.ru/v3"
 
     async def create_payment(
@@ -77,6 +82,14 @@ class PaymentGatewayService:
 def get_payment_gateway() -> PaymentGatewayService:
     """
     DI-функция для получения экземпляра сервиса платежного шлюза.
-    Здесь можно будет передавать настройки из Settings.
+
+    Важно: shop_id и secret_key берутся из .env через Settings, так что
+    при деплое достаточно задать переменные окружения:
+      - yookassa_shop_id
+      - yookassa_secret_key
     """
-    return PaymentGatewayService()
+    settings = Settings()
+    return PaymentGatewayService(
+        shop_id=settings.yookassa_shop_id,
+        secret_key=settings.yookassa_secret_key,
+    )

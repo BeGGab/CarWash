@@ -10,12 +10,11 @@ from aiogram.enums import ParseMode
 
 from src.core.db import async_session_maker 
 from src.bot.utils.db import DbSessionMiddleware 
+from src.bot.utils.api_client_middleware import ApiClientMiddleware
 from src.core.config import Settings
 from src.bot.handlers import user_router, booking_router, admin_wash_router
 from src.bot.admin_panel.admin import admin_router as system_admin_router 
-from src.bot.handlers.user import setup_config as setup_user_config
-from src.bot.handlers.booking import setup_config as setup_booking_config
-from src.bot.handlers.admin_wash import setup_config as setup_admin_config
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,22 +33,20 @@ async def main():
     )
     
     storage = MemoryStorage()
-    dp = Dispatcher(storage=storage)
+    dp = Dispatcher(storage=storage, settings=settings)
     
-    admin_ids = [settings.admins_id]
+    admin_ids = settings.admins_id
     webapp_url = settings.webapp_url
-    
-    setup_user_config(admin_ids, webapp_url)
-    setup_booking_config(admin_ids, webapp_url)
-    setup_admin_config(admin_ids)
+ 
     
     
     dp.update.middleware(DbSessionMiddleware(session_pool=async_session_maker))
+    dp.update.middleware(ApiClientMiddleware(settings.api_base_url))
     
     dp.include_router(user_router)
     dp.include_router(booking_router)
     dp.include_router(admin_wash_router)
-    dp.include_router(system_admin_router) # Подключаем роутер
+    dp.include_router(system_admin_router) 
     
     logger.info("Запуск CarWash бота...")
     

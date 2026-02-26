@@ -61,7 +61,8 @@ class BookingRepository:
 
     @staticmethod
     def generate_qr_data(booking_id: uuid.UUID, user_phone: str) -> str:
-        data = f"{booking_id}:{user_phone}:{datetime.now().isoformat()}"
+        # Детерминированный QR: только booking_id и телефон
+        data = f"{booking_id}:{user_phone}"
         hash_obj = hashlib.sha256(data.encode())
         return base64.urlsafe_b64encode(hash_obj.digest()[:16]).decode()
 

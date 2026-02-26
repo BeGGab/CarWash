@@ -1,7 +1,6 @@
 """
 Обработчики команд пользователя для Telegram бота CarWash
 """
-
 import logging
 from aiogram import Router, F
 from aiogram.types import (
@@ -17,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.states import UserStates
 import src.bot.keyboards.keyboards as kb
+from bot.utils.api_client import ApiClient
+import httpx
 
 
 from src.services.users import (
@@ -28,24 +29,13 @@ from src.schemas.users import SPhoneVerification, SUserCreate
 
 from src.core.config import Settings
 
-setting = Settings()
-
 
 logger = logging.getLogger(__name__)
 router = Router(name="user")
 
-ADMIN_IDS = [setting.admins_id]
-WEBAPP_URL = setting.webapp_url
-
-
-def setup_config(admin_ids: list, webapp_url: str = None):
-    global ADMIN_IDS, WEBAPP_URL
-    ADMIN_IDS = admin_ids
-    WEBAPP_URL = webapp_url
-
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
+async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, settings: Settings):
     """
     Обработчик команды /start. Проверяет, зарегистрирован ли пользователь.
     Если нет - запускает процесс регистрации.
@@ -69,14 +59,15 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
 
 🚗 Давай начнём!
 """
-        keyboard = kb.get_main_keyboard(message.from_user.id, ADMIN_IDS, WEBAPP_URL)
+        keyboard = kb.get_main_keyboard(message.from_user.id, settings.admins_id, settings.webapp_url)
         await message.answer(welcome_text, reply_markup=keyboard, parse_mode="HTML")
     except Exception:
         # Если find_user выбросил исключение (пользователь не найден)
         await state.clear()
         # Предлагаем использовать имя из Telegram или ввести свое
+        tg_first = message.from_user.first_name or " "
         name_kb = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=message.from_user.first_name)]],
+            keyboard=[[KeyboardButton(text=tg_first)]],
             resize_keyboard=True,
             one_time_keyboard=True,
         )
@@ -89,9 +80,9 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
 
 
 @router.callback_query(F.data == "back_to_menu")
-async def back_to_menu(callback: CallbackQuery, state: FSMContext):
+async def back_to_menu(callback: CallbackQuery, state: FSMContext, settings: Settings):
     await state.clear()
-    keyboard = kb.get_main_keyboard(callback.from_user.id, ADMIN_IDS, WEBAPP_URL)
+    keyboard = kb.get_main_keyboard(callback.from_user.id, settings.admins_id, settings.webapp_url)
     await callback.message.edit_text(
         "🚿 <b>Главное меню</b>\n\nВыберите действие:",
         reply_markup=keyboard,
@@ -103,7 +94,7 @@ async def back_to_menu(callback: CallbackQuery, state: FSMContext):
 @router.message(StateFilter(UserStates.reg_name))
 async def get_reg_name(message: Message, state: FSMContext):
     """Шаг 1 регистрации: получаем имя."""
-    await state.update_data(first_name=message.text)
+    await state.update_data(first_name=message.text.strip())
     await message.answer(
         "Отлично! Теперь, пожалуйста, отправьте ваш номер телефона, "
         "нажав на кнопку ниже 📱",
@@ -112,26 +103,34 @@ async def get_reg_name(message: Message, state: FSMContext):
     await state.set_state(UserStates.reg_phone)
 
 
+@router.message(
+    StateFilter(UserStates.reg_phone), F.text.casefold() == "❌ отмена".casefold()
+)
+async def cancel_reg_phone(message: Message, state: FSMContext, settings: Settings):
+    await state.clear()
+    keyboard = kb.get_main_keyboard(message.from_user.id, settings.admins_id, settings.webapp_url)
+    await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Выберите действие:", reply_markup=keyboard)
+
+
 @router.message(StateFilter(UserStates.reg_phone), F.text)
 async def wrong_reg_phone(message: Message):
     """Обработка случая, когда вместо кнопки отправляют текст."""
     await message.answer(
-        "❌ Неверный формат. Пожалуйста, нажмите на кнопку 'Отправить мой номер'."
+        "❌ Неверный формат. Пожалуйста, нажмите на кнопку 'Отправить номер телефона' или 'Отмена'."
     )
 
 
 @router.callback_query(F.data == "profile")
-async def show_profile(callback: CallbackQuery, session: AsyncSession):
+async def show_profile(callback: CallbackQuery, session: AsyncSession, settings: Settings):
     """
     Отображает профиль пользователя, получая данные из БД.
     """
     try:
-        # Ищем пользователя в БД через сервисный слой
         db_user = await find_user(session, telegram_id=callback.from_user.id)
         is_verified = db_user.is_verified
         phone_number = db_user.phone_number
     except Exception:
-        # Если пользователь не найден в нашей БД (например, новый)
         is_verified = False
         phone_number = None
 
@@ -143,8 +142,10 @@ async def show_profile(callback: CallbackQuery, session: AsyncSession):
 📱 Телефон: {phone_number or "❌ не подтверждён"}
 """
 
-    keyboard = kb.get_profile_keyboard(is_verified)
-    await callback.message.edit_text(profile_text, reply_markup=keyboard, parse_mode="HTML")
+    keyboard = kb.get_profile_keyboard(is_verified, settings.webapp_url)
+    await callback.message.edit_text(
+        profile_text, reply_markup=keyboard, parse_mode="HTML"
+    )
     await callback.answer()
 
 
@@ -157,13 +158,22 @@ async def request_phone(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(UserStates.waiting_for_phone, F.contact)
 @router.message(
-    UserStates.reg_phone, F.contact
+    StateFilter(UserStates.waiting_for_phone),
+    F.text.casefold() == "❌ отмена".casefold(),
 )
-async def process_phone(message: Message, state: FSMContext, session: AsyncSession):
+async def cancel_waiting_phone(message: Message, state: FSMContext, settings: Settings):
+    await state.clear()
+    keyboard = kb.get_main_keyboard(message.from_user.id, settings.admins_id, settings.webapp_url)
+    await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Выберите действие:", reply_markup=keyboard)
+
+
+@router.message(UserStates.waiting_for_phone, F.contact)
+@router.message(UserStates.reg_phone, F.contact)
+async def process_phone(message: Message, state: FSMContext, session: AsyncSession, settings: Settings):
     contact = message.contact
-    if contact.user_id != message.from_user.id:
+    if not contact or contact.user_id != message.from_user.id:
         await message.answer("❌ Отправьте свой номер телефона")
         return
 
@@ -174,7 +184,7 @@ async def process_phone(message: Message, state: FSMContext, session: AsyncSessi
         user_data = SUserCreate(
             telegram_id=message.from_user.id,
             first_name=reg_data.get("first_name"),
-            username=message.from_user.username,
+            username=message.from_user.username or f"user_{message.from_user.id}",
             phone_number=contact.phone_number,
             is_verified=True,
         )
@@ -183,7 +193,7 @@ async def process_phone(message: Message, state: FSMContext, session: AsyncSessi
             "✅ Вы успешно зарегистрированы!", reply_markup=ReplyKeyboardRemove()
         )
     else:
-        # Простое обновление номера для уже существующего пользователя
+        # Обновление номера для существующего пользователя
         verification_data = SPhoneVerification(
             telegram_id=message.from_user.id, phone_number=contact.phone_number
         )
@@ -194,12 +204,12 @@ async def process_phone(message: Message, state: FSMContext, session: AsyncSessi
         )
 
     await state.clear()
-    keyboard = kb.get_main_keyboard(message.from_user.id, ADMIN_IDS, WEBAPP_URL)
-    await message.answer("✅ Регистрация завершена!\n\nВыберите действие:", reply_markup=keyboard)
+    keyboard = kb.get_main_keyboard(message.from_user.id, settings.admins_id, settings.webapp_url)
+    await message.answer("✅ Готово!\n\nВыберите действие:", reply_markup=keyboard)
 
 
 @router.callback_query(F.data == "send_location")
-async def request_location(callback: CallbackQuery, state: FSMContext):
+async def request_location(callback: CallbackQuery, state: FSMContext, settings: Settings):
     await state.set_state(UserStates.selecting_location)
     await callback.message.answer(
         "📍 Отправьте местоположение:", reply_markup=kb.get_location_keyboard()
@@ -208,29 +218,37 @@ async def request_location(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(UserStates.selecting_location, F.location)
-async def process_location(message: Message, state: FSMContext):
+async def process_location(message: Message, state: FSMContext, settings: Settings):
     location = message.location
     await state.update_data(latitude=location.latitude, longitude=location.longitude)
 
     await message.answer(
         "📍 Ищу ближайшие мойки...", reply_markup=ReplyKeyboardRemove()
     )
+    try:
+        carwashes = await ApiClient(settings.api_base_url).get_carwashes(
+            latitude=location.latitude, longitude=location.longitude
+        )
 
-    # TODO: API запрос
-    carwashes = [
-        {"id": "1", "name": "АвтоСпа Premium", "distance": 1.2},
-        {"id": "2", "name": "Чистый Кузов", "distance": 2.5},
-    ]
+        await state.clear()
 
-    await state.clear()
-    keyboard = kb.get_carwashes_keyboard(carwashes)
-    await message.answer(
-        f"🏢 <b>Найдено {len(carwashes)} моек:</b>", reply_markup=keyboard, parse_mode="HTML"
-    )
+        if not carwashes:
+            await message.answer("😔 Поблизости не найдено автомоек. Попробуйте изменить местоположение.")
+            return
+
+        keyboard = kb.get_carwashes_keyboard(carwashes)
+        await message.answer(
+            f"🏢 <b>Найдено {len(carwashes)} моек поблизости:</b>",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"Error getting carwashes by location: {e}")
+        await message.answer("❌ Не удалось загрузить список моек. Попробуйте позже.")
 
 
 @router.callback_query(F.data == "find_wash")
-async def find_wash(callback: CallbackQuery, state: FSMContext):
+async def find_wash(callback: CallbackQuery, state: FSMContext, settings: Settings):
     data = await state.get_data()
 
     if not data.get("latitude"):
@@ -244,69 +262,85 @@ async def find_wash(callback: CallbackQuery, state: FSMContext):
     carwashes = [{"id": "1", "name": "АвтоСпа Premium", "distance": 1.2}]
     keyboard = kb.get_carwashes_keyboard(carwashes)
     await callback.message.edit_text(
-        f"🏢 <b>Найдено {len(carwashes)} моек:</b>", reply_markup=keyboard, parse_mode="HTML"
+        f"🏢 <b>Найдено {len(carwashes)} моек:</b>",
+        reply_markup=keyboard,
+        parse_mode="HTML",
     )
     await callback.answer()
 
 
 @router.callback_query(F.data == "my_bookings")
-async def show_my_bookings(callback: CallbackQuery, state: FSMContext):
-    # TODO: API запрос
-    bookings = [
-        {
-            "id": "b1",
-            "car_wash_name": "АвтоСпа",
-            "slot_date": "25 янв",
-            "start_time": "14:00",
-            "status": "confirmed",
-        }
-    ]
+async def show_my_bookings(callback: CallbackQuery, session: AsyncSession, api_client: ApiClient):
+    """Показывает активные бронирования пользователя, делая запрос к API."""
+    try:
+        user = await find_user(session, telegram_id=callback.from_user.id)
+        if not user or not user.phone_number:
+            await callback.message.edit_text(
+                "📱 Для просмотра бронирований необходимо подтвердить номер телефона в профиле.",
+                reply_markup=kb.get_back_keyboard("profile"),
+                parse_mode="HTML"
+            )
+            await callback.answer()
+            return
 
-    text = (
-        "📅 <b>Ваши брони:</b>" if bookings else "📅 <b>Нет активных бронирований</b>"
-    )
-    keyboard = kb.get_my_bookings_keyboard(bookings, show_active=True)
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    await callback.answer()
+        # API запрос для получения бронирований
+        bookings_data = await api_client.get_my_bookings(phone=user.phone_number)
+        bookings = bookings_data.get("items", [])
+
+        text = (
+            "📅 <b>Ваши активные брони:</b>" if bookings else "📅 <b>У вас нет активных бронирований.</b>"
+        )
+        keyboard = kb.get_my_bookings_keyboard(bookings, show_active=True) # bookings_data['items']
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error getting user bookings: {e}")
+        await callback.message.answer("❌ Не удалось загрузить список бронирований. Попробуйте позже.")
+    finally:
+        await callback.answer()
 
 
 @router.callback_query(F.data.startswith("booking_"))
-async def show_booking_detail(callback: CallbackQuery, state: FSMContext):
-    booking_id = callback.data.split("_")[1]
+async def show_booking_detail(callback: CallbackQuery, state: FSMContext, api_client: ApiClient):
+    """Показывает детали бронирования, делая запрос к API."""
+    booking_id = callback.data.split("_", 1)[1]
 
-    booking = {
-        "id": booking_id,
-        "car_wash_name": "АвтоСпа Premium",
-        "car_wash_address": "ул. Ленина, 15",
-        "slot_date": "25 января",
-        "start_time": "14:00",
-        "end_time": "14:30",
-        "wash_type_name": "Стандарт",
-        "car_plate": "А123БВ77",
-        "car_model": "Toyota Camry",
-        "final_price": 800,
-        "payment_status": "paid",
-        "status": "confirmed",
-    }
+    try:
+        # API запрос для получения деталей бронирования
+        booking = await api_client.get_booking_details(booking_id)
 
-    text = f"""
+        # TODO: Форматирование даты может быть вынесено в утилиту
+        from datetime import datetime
+        slot_date_obj = datetime.fromisoformat(booking["slot_date"])
+        formatted_date = slot_date_obj.strftime("%d %B")
+        start_time_obj = datetime.fromisoformat(booking["start_time"])
+        formatted_time = start_time_obj.strftime("%H:%M")
+
+        text = f"""
 🚗 <b>Бронь #{booking_id[:6]}</b>
 
 🏢 <b>{booking["car_wash_name"]}</b>
 📍 {booking["car_wash_address"]}
-📅 {booking["slot_date"]} ⏰ {booking["start_time"]}
+📅 {formatted_date} ⏰ {formatted_time}
 🧽 {booking["wash_type_name"]}
 🚙 {booking["car_model"]} ({booking["car_plate"]})
 💰 {booking["final_price"]}₽ (предоплата 50%)
 """
+        keyboard = kb.get_booking_detail_keyboard(booking)
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
-    keyboard = kb.get_booking_detail_keyboard(booking)
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    await callback.answer()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"API error getting booking detail: {e.response.text}")
+        await callback.message.answer("❌ Не удалось загрузить детали бронирования.")
+    except Exception as e:
+        logger.error(f"Error getting booking detail: {e}")
+        await callback.message.answer("❌ Произошла ошибка. Попробуйте позже.")
+    finally:
+        await callback.answer()
 
 
 @router.callback_query(F.data.startswith("cancel_booking_"))
-async def cancel_booking_confirm(callback: CallbackQuery, state: FSMContext):
+async def cancel_booking_confirm(callback: CallbackQuery, state: FSMContext, settings: Settings):
     booking_id = callback.data.replace("cancel_booking_", "")
     keyboard = kb.get_confirm_cancel_keyboard(booking_id)
     await callback.message.edit_text(
@@ -316,20 +350,37 @@ async def cancel_booking_confirm(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("confirm_cancel_"))
-async def confirm_cancel_booking(callback: CallbackQuery, state: FSMContext):
+async def confirm_cancel_booking(callback: CallbackQuery, state: FSMContext, settings: Settings, api_client: ApiClient):
     booking_id = callback.data.replace("confirm_cancel_", "")
-    await callback.message.edit_text(f"✅ Бронь #{booking_id[:6]} отменена")
+    
+    try:
+        await api_client.cancel_booking(booking_id)
 
-    keyboard = kb.get_main_keyboard(callback.from_user.id, ADMIN_IDS, WEBAPP_URL)
-    await callback.message.answer("Выберите действие:", reply_markup=keyboard)
-    await callback.answer()
+        await callback.message.edit_text(f"✅ Бронь #{booking_id[:6]} отменена. Средства будут возвращены в ближайшее время.")
+        
+        keyboard = kb.get_main_keyboard(callback.from_user.id, settings.admins_id, settings.webapp_url)
+        await callback.message.answer("Выберите действие:", reply_markup=keyboard)
+
+    except httpx.HTTPStatusError as e:
+        error_detail = e.response.json().get("detail", "Не удалось отменить бронирование")
+        logger.error(f"API error cancelling booking: {e.response.text}")
+        await callback.message.answer(f"❌ Ошибка: {error_detail}")
+    except Exception as e:
+        logger.error(f"Error cancelling booking: {e}")
+        await callback.message.answer("❌ Произошла непредвиденная ошибка.")
+    finally:
+        await callback.answer()
 
 
 @router.callback_query(F.data.startswith("show_qr_"))
 async def show_qr_code(callback: CallbackQuery, state: FSMContext):
     booking_id = callback.data.replace("show_qr_", "")
+    # TODO: В реальном приложении QR-код нужно получать из данных бронирования
+    # и генерировать картинку, а не просто текст.
+    # Например, с помощью библиотеки qrcode.
     await callback.message.answer(
-        f"📱 <b>QR-код #{booking_id[:6]}</b>\n\nПокажите на мойке", parse_mode="HTML"
+        f"📱 <b>QR-код для брони #{booking_id[:6]}</b>\n\n"
+        f"<code>{booking_id}</code>\n\nПокажите этот код на мойке.", parse_mode="HTML"
     )
     await callback.answer("QR отправлен!")
 
@@ -339,9 +390,20 @@ async def noop_handler(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "edit_profile")
+async def edit_profile_fallback(callback: CallbackQuery):
+    """
+    Запасной обработчик на случай, если webapp_url не задан
+    и кнопка 'Редактировать' использует callback_data.
+    """
+    await callback.answer(
+        "Редактирование профиля доступно в Mini App.", show_alert=True
+    )
+
+
 @router.callback_query(F.data == "cancel")
-async def cancel_handler(callback: CallbackQuery, state: FSMContext):
+async def cancel_handler(callback: CallbackQuery, state: FSMContext, settings: Settings):
     await state.clear()
-    keyboard = kb.get_main_keyboard(callback.from_user.id, ADMIN_IDS, WEBAPP_URL)
+    keyboard = kb.get_main_keyboard(callback.from_user.id, settings.admins_id, settings.webapp_url)
     await callback.message.edit_text("Отменено", reply_markup=keyboard)
     await callback.answer()

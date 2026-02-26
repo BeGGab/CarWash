@@ -24,6 +24,8 @@ class SPhoneVerification(BaseModel):
     @field_validator("phone_number", mode="before")
     @classmethod
     def validate_phone_number(cls, values: str) -> str:
+        if not values:
+            return values
         if not re.match(r"^\+7\d{10}$", values):
             values = "+7" + values[1:]
         return values
@@ -31,11 +33,11 @@ class SPhoneVerification(BaseModel):
 
 class SUserCreate(BaseModel):
     telegram_id: int = Field(...)
-    username: str = Field(..., min_length=5, max_length=16)
+    username: str = Field(..., min_length=3, max_length=32)
     email: Optional[EmailStr] = Field(None)
     first_name: Optional[str] = Field(None, min_length=1, max_length=50)
     last_name: Optional[str] = Field(None, min_length=1, max_length=50)
-    phone_number: str = Field(...)
+    phone_number: Optional[str] = Field(None)
     is_verified: bool = Field(False)
 
     model_config = ConfigDict(from_attributes=True)
@@ -52,6 +54,8 @@ class SUserCreate(BaseModel):
     @field_validator("phone_number", mode="before")
     @classmethod
     def validate_phone_number(cls, values: str) -> str:
+        if not values:
+            return values
         if not re.match(r"^\+7\d{10}$", values):
             values = "+7" + values[1:]
         return values
@@ -108,7 +112,7 @@ class SUserResponse(BaseModel):
     email: Optional[EmailStr]
     first_name: Optional[str]
     last_name: Optional[str]
-    phone_number: str
+    phone_number: Optional[str] = None
     is_verified: bool
     total_bookings: int = 0
     completed_bookings: int = 0
