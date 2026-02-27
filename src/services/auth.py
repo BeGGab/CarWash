@@ -2,8 +2,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.telegram_auth import validate_init_data, parse_init_data
-from src.schemas.users import SUserCreate, SUserResponse
-from src.services.users import create_user
+from src.schemas.users import SUserCreate, SUserResponse, STelegramAuth
+from src.services.users import UserService
 
 from src.core.config import Settings
 
@@ -39,5 +39,6 @@ async def get_or_create_user_by_init_data(
         is_verified=False,
     )
 
-    user = await create_user(session, user_create_data)
+    user_service = UserService(session)
+    user = await user_service.create_user(user_create_data)
     return user

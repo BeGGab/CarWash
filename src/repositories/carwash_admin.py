@@ -25,7 +25,7 @@ class CarWashAdminRepository:
         return await session.get(self.model, admin_id)
 
     async def get_by_user_and_carwash(
-        self, session: AsyncSession, user_id: int, car_wash_id: uuid.UUID
+        self, session: AsyncSession, user_id: uuid.UUID, car_wash_id: uuid.UUID
     ) -> CarWashAdmin | None:
         query = select(self.model).where(
             and_(self.model.user_id == user_id, self.model.car_wash_id == car_wash_id)
@@ -33,7 +33,7 @@ class CarWashAdminRepository:
         result = await session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_user_admin_roles(self, session: AsyncSession, user_id: int) -> list[CarWashAdmin]:
+    async def get_user_admin_roles(self, session: AsyncSession, user_id: uuid.UUID) -> list[CarWashAdmin]:
         query = (
             select(self.model)
             .where(self.model.user_id == user_id)

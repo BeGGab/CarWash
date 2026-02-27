@@ -11,14 +11,7 @@ from src.schemas.users import (
     SUserResponse,
     SPhoneVerification,
 )
-from src.services.users import (
-    verify_user,
-    find_user,
-    find_all_users,
-    update_user,
-    delete_user,
-    get_for_admins,
-)
+from src.services.users import UserService
 
 from src.services.auth import get_or_create_user_by_init_data
 
@@ -52,7 +45,8 @@ async def verify_phone(
 
     Telegram Mini App отправляет номер телефона через requestContact
     """
-    return verify_user(session, data)
+    user_service = UserService(session)
+    return await user_service.verify_user(data)
 
 
 @router.get("/me")
@@ -60,7 +54,8 @@ async def get_current_user(
     x_telegram_id: int = Header(..., description="Telegram ID пользователя"),
     session: AsyncSession = Depends(get_async_session),
 ) -> SUserResponse:
-    return await find_user(session, telegram_id=x_telegram_id)
+    user_service = UserService(session)
+    return await user_service.find_user(telegram_id=x_telegram_id)
 
 
 @router.patch("/me")
@@ -68,24 +63,28 @@ async def update_current_user(
     data: SUserUpdate,
     session: AsyncSession = Depends(get_async_session),
 ) -> SUserResponse:
-    return await update_user(session, data)
+    user_service = UserService(session)
+    return await user_service.update_user(data)
 
 
 @router.get("/{user_id}")
 async def get_user(
     user_id: uuid.UUID, session: AsyncSession = Depends(get_async_session)
 ) -> SUserResponse:
-    return get_for_admins(session, id=user_id)
+    user_service = UserService(session)
+    return await user_service.get_for_admins(id=user_id)
 
 
 @router.get("/")
 async def get_all_users(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[SUserResponse]:
-    return find_all_users(session)
+    user_service = UserService(session)
+    return await user_service.find_all_users()
 
 
 @router.delete("/{user_id}")
 async def delete(id: uuid.UUID, session: AsyncSession = Depends(get_async_session)):
-    await delete_user(session, id)
+    user_service = UserService(session)
+    await user_service.delete_user(id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class SCarWashAdminBase(BaseModel):
-    user_id: int
+    user_id: uuid.UUID
     car_wash_id: uuid.UUID
 
 

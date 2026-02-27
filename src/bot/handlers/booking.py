@@ -20,7 +20,7 @@ from src.bot.keyboards.keyboards import (
     get_main_keyboard,
     get_back_keyboard,
 )
-from src.services.users import find_user
+from src.services.users import UserService
 from src.bot.utils.api_client import ApiClient
 from src.core.config import Settings
 
@@ -234,7 +234,8 @@ async def process_payment(
     data = await state.get_data()
     try:
         # 1. Получаем пользователя и его телефон
-        user = await find_user(session, telegram_id=callback.from_user.id)
+        user_service = UserService(session)
+        user = await user_service.find_user(telegram_id=callback.from_user.id)
         if not user or not user.phone_number:
             await callback.message.answer(
                 "❌ Для бронирования необходимо подтвердить номер телефона в профиле."

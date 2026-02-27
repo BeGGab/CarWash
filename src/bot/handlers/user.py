@@ -3,6 +3,7 @@
 """
 
 import logging
+from fastapi import HTTPException
 from aiogram import Router, F
 from aiogram.types import (
     Message,
@@ -24,13 +25,7 @@ from src.bot.utils.datetime_utils import (
 )
 import httpx
 
-
-from src.services.users import (
-    find_user,
-    create_user,
-    get_user_carwash_admin_roles,
-    verify_user as verify_user_service,
-)
+from src.services.users import UserService
 from src.schemas.users import SPhoneVerification, SUserCreate
 
 from src.core.config import Settings
@@ -51,58 +46,59 @@ async def cmd_start(
     """
     try:
         # Пытаемся найти пользователя в БД
-        user = await find_user(session, telegram_id=message.from_user.id)
-        # Если пользователь найден, показываем главное меню
-        admin_roles = await get_user_carwash_admin_roles(
-            session, user_id=message.from_user.id
-        )
-        await state.clear()
-        welcome_text = f"""
+        user_service = UserService(session)
+        user = await user_service.find_user(telegram_id=message.from_user.id)
+    except HTTPException as e:
+        if e.status_code == 404:
+            # Пользователь не найден, запускаем регистрацию
+            await state.clear()
+            tg_first_name = message.from_user.first_name or " "
+            name_kb = ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text=tg_first_name)]],
+                resize_keyboard=True,
+                one_time_keyboard=True,
+            )
+            await message.answer(
+                "👋 Добро пожаловать! Похоже, вы у нас впервые.\n\n"
+                "Давайте зарегистрируемся. Введите ваше имя ✍️",
+                reply_markup=name_kb,
+            )
+            await state.set_state(UserStates.reg_name)
+        else:
+            logger.error(f"API error in /start handler: {e}", exc_info=True)
+            await message.answer("Произошла ошибка при запуске. Попробуйте снова позже.")
+        return
+    except Exception as e:
+        logger.error(f"Unexpected error in /start handler: {e}", exc_info=True)
+        await message.answer("Произошла ошибка при запуске. Попробуйте снова позже.")
+        return
+
+    # Пользователь найден, показываем главное меню
+    await state.clear()
+    admin_roles = await user_service.get_user_carwash_admin_roles(user_id=message.from_user.id)
+    welcome_text = f"""
 🚿 <b>Добро пожаловать в CarWash!</b>
 
 Привет, {message.from_user.first_name}! 👋
 
-Я помогу забронировать мойку без очередей:
-✅ Найди ближайшую мойку
-✅ Выбери удобное время  
-✅ Оплати 50% онлайн
-✅ Покажи QR-код на мойке
-
-🚗 Давай начнём!
+Я помогу забронировать мойку без очередей.
 """
-        keyboard = kb.get_main_keyboard(
-            user_id=message.from_user.id,
-            system_admins=settings.admins_id,
-            webapp_url=settings.webapp_url,
-            carwash_admin_roles=admin_roles,
-        )
-        await message.answer(welcome_text, reply_markup=keyboard, parse_mode="HTML")
-    except Exception:
-        # Если find_user выбросил исключение (пользователь не найден)
-        await state.clear()
-        # Предлагаем использовать имя из Telegram или ввести свое
-        tg_first = message.from_user.first_name or " "
-        name_kb = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=tg_first)]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
-        await message.answer(
-            "👋 Добро пожаловать! Похоже, вы у нас впервые.\n\n"
-            "Давайте зарегистрируемся. Введите ваше имя ✍️",
-            reply_markup=name_kb,
-        )
-        await state.set_state(UserStates.reg_name)
-
+    keyboard = kb.get_main_keyboard(
+        user_id=message.from_user.id,
+        system_admins=settings.admins_id,
+        webapp_url=settings.webapp_url,
+        carwash_admin_roles=admin_roles,
+    )
+    await message.answer(welcome_text, reply_markup=keyboard, parse_mode="HTML")
+    
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(
     callback: CallbackQuery, state: FSMContext, settings: Settings, session: AsyncSession
 ):
     await state.clear()
-    admin_roles = await get_user_carwash_admin_roles(
-        session, user_id=callback.from_user.id
-    )
+    user_service = UserService(session)
+    admin_roles = await user_service.get_user_carwash_admin_roles(user_id=callback.from_user.id)
     keyboard = kb.get_main_keyboard(
         user_id=callback.from_user.id,
         system_admins=settings.admins_id,
@@ -136,9 +132,8 @@ async def cancel_reg_phone(
     message: Message, state: FSMContext, settings: Settings, session: AsyncSession
 ):
     await state.clear()
-    admin_roles = await get_user_carwash_admin_roles(
-        session, user_id=message.from_user.id
-    )
+    user_service = UserService(session)
+    admin_roles = await user_service.get_user_carwash_admin_roles(user_id=message.from_user.id)
     keyboard = kb.get_main_keyboard(
         message.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
@@ -162,7 +157,8 @@ async def show_profile(
     Отображает профиль пользователя, получая данные из БД.
     """
     try:
-        db_user = await find_user(session, telegram_id=callback.from_user.id)
+        user_service = UserService(session)
+        db_user = await user_service.find_user(telegram_id=callback.from_user.id)
         is_verified = db_user.is_verified
         phone_number = db_user.phone_number
     except Exception:
@@ -201,9 +197,8 @@ async def cancel_waiting_phone(
     message: Message, state: FSMContext, settings: Settings, session: AsyncSession
 ):
     await state.clear()
-    admin_roles = await get_user_carwash_admin_roles(
-        session, user_id=message.from_user.id
-    )
+    user_service = UserService(session)
+    admin_roles = await user_service.get_user_carwash_admin_roles(user_id=message.from_user.id)
     keyboard = kb.get_main_keyboard(
         message.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
@@ -221,6 +216,7 @@ async def process_phone(
         await message.answer("❌ Отправьте свой номер телефона")
         return
 
+    user_service = UserService(session)
     current_state = await state.get_state()
     if current_state == UserStates.reg_phone.state:
         # Завершение регистрации
@@ -232,7 +228,7 @@ async def process_phone(
             phone_number=contact.phone_number,
             is_verified=True,
         )
-        await create_user(session, user_data)
+        await user_service.create_user(user_data)
         await message.answer(
             "✅ Вы успешно зарегистрированы!", reply_markup=ReplyKeyboardRemove()
         )
@@ -241,16 +237,14 @@ async def process_phone(
         verification_data = SPhoneVerification(
             telegram_id=message.from_user.id, phone_number=contact.phone_number
         )
-        updated_user = await verify_user_service(session, verification_data)
+        updated_user = await user_service.verify_user(verification_data)
         await message.answer(
             f"✅ Ваш номер {updated_user.phone_number} подтверждён!",
             reply_markup=ReplyKeyboardRemove(),
         )
 
     await state.clear()
-    admin_roles = await get_user_carwash_admin_roles(
-        session, user_id=message.from_user.id
-    )
+    admin_roles = await user_service.get_user_carwash_admin_roles(user_id=message.from_user.id)
     keyboard = kb.get_main_keyboard(
         message.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
@@ -301,23 +295,12 @@ async def process_location(message: Message, state: FSMContext, settings: Settin
 
 
 @router.callback_query(F.data == "find_wash")
-async def find_wash(callback: CallbackQuery, state: FSMContext, settings: Settings):
-    data = await state.get_data()
-
-    if not data.get("latitude"):
-        await state.set_state(UserStates.selecting_location)
-        await callback.message.answer(
-            "📍 Отправьте местоположение:", reply_markup=kb.get_location_keyboard()
-        )
-        await callback.answer()
-        return
-
-    carwashes = [{"id": "1", "name": "АвтоСпа Premium", "distance": 1.2}]
-    keyboard = kb.get_carwashes_keyboard(carwashes)
-    await callback.message.edit_text(
-        f"🏢 <b>Найдено {len(carwashes)} моек:</b>",
-        reply_markup=keyboard,
-        parse_mode="HTML",
+async def find_wash_by_location(callback: CallbackQuery, state: FSMContext):
+    """Начинает процесс поиска мойки по геолокации."""
+    await state.set_state(UserStates.selecting_location)
+    await callback.message.answer(
+        "📍 Отправьте ваше местоположение, чтобы найти ближайшие автомойки.",
+        reply_markup=kb.get_location_keyboard()
     )
     await callback.answer()
 
@@ -328,7 +311,8 @@ async def show_my_bookings(
 ):
     """Показывает активные бронирования пользователя, делая запрос к API."""
     try:
-        user = await find_user(session, telegram_id=callback.from_user.id)
+        user_service = UserService(session)
+        user = await user_service.find_user(telegram_id=callback.from_user.id)
         if not user or not user.phone_number:
             await callback.message.edit_text(
                 "📱 Для просмотра бронирований необходимо подтвердить номер телефона в профиле.",
@@ -421,9 +405,8 @@ async def confirm_cancel_booking(
         await callback.message.edit_text(
             f"✅ Бронь #{booking_id[:6]} отменена. Средства будут возвращены в ближайшее время."
         )
-        admin_roles = await get_user_carwash_admin_roles(
-            session, user_id=callback.from_user.id
-        )
+        user_service = UserService(session)
+        admin_roles = await user_service.get_user_carwash_admin_roles(user_id=callback.from_user.id)
         keyboard = kb.get_main_keyboard(
             callback.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
         )
@@ -477,9 +460,8 @@ async def cancel_handler(
     callback: CallbackQuery, state: FSMContext, settings: Settings, session: AsyncSession
 ):
     await state.clear()
-    admin_roles = await get_user_carwash_admin_roles(
-        session, user_id=callback.from_user.id
-    )
+    user_service = UserService(session)
+    admin_roles = await user_service.get_user_carwash_admin_roles(user_id=callback.from_user.id)
     keyboard = kb.get_main_keyboard(
         callback.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
