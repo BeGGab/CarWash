@@ -29,3 +29,11 @@ class CarWash(Base):
         back_populates="car_wash", cascade="all, delete-orphan"
     )
     booking: Mapped[List["Booking"]] = relationship(back_populates="car_wash")
+    
+    admins: Mapped[List["CarWashAdmin"]] = relationship(back_populates="car_wash", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<CarWash(name={self.name}, address={self.address})>"
+
+
+

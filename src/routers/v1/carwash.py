@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/carwashes", tags=["CarWashes"])
 
 
 @router.get("/", status_code=status.HTTP_200_OK)
-async def get_all_carwashes_service(
+async def get_all_carwashes(
     session: AsyncSession = Depends(get_async_session),
 ) -> List[SCarWashResponse]:
     """Получение списка всех автомоек."""
@@ -28,7 +28,7 @@ async def get_all_carwashes_service(
 
 
 @router.get("/{carwash_id}", status_code=status.HTTP_200_OK)
-async def get_carwash_by_id_service(
+async def get_carwash_by_id(
     carwash_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
 ) -> SCarWashResponse:
@@ -39,7 +39,7 @@ async def get_carwash_by_id_service(
 @router.get(
     "/{carwash_id}/slots-count", response_model=dict, status_code=status.HTTP_200_OK
 )
-async def get_carwash_slots_stats_service(
+async def get_carwash_slots_stats(
     carwash_id: uuid.UUID,
     date: Optional[str] = None,
     session: AsyncSession = Depends(get_async_session),

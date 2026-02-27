@@ -28,6 +28,7 @@ import httpx
 from src.services.users import (
     find_user,
     create_user,
+    get_user_carwash_admin_roles,
     verify_user as verify_user_service,
 )
 from src.schemas.users import SPhoneVerification, SUserCreate
@@ -50,8 +51,11 @@ async def cmd_start(
     """
     try:
         # Пытаемся найти пользователя в БД
-        await find_user(session, telegram_id=message.from_user.id)
+        user = await find_user(session, telegram_id=message.from_user.id)
         # Если пользователь найден, показываем главное меню
+        admin_roles = await get_user_carwash_admin_roles(
+            session, user_id=message.from_user.id
+        )
         await state.clear()
         welcome_text = f"""
 🚿 <b>Добро пожаловать в CarWash!</b>
@@ -67,7 +71,10 @@ async def cmd_start(
 🚗 Давай начнём!
 """
         keyboard = kb.get_main_keyboard(
-            message.from_user.id, settings.admins_id, settings.webapp_url
+            user_id=message.from_user.id,
+            system_admins=settings.admins_id,
+            webapp_url=settings.webapp_url,
+            carwash_admin_roles=admin_roles,
         )
         await message.answer(welcome_text, reply_markup=keyboard, parse_mode="HTML")
     except Exception:
@@ -89,10 +96,18 @@ async def cmd_start(
 
 
 @router.callback_query(F.data == "back_to_menu")
-async def back_to_menu(callback: CallbackQuery, state: FSMContext, settings: Settings):
+async def back_to_menu(
+    callback: CallbackQuery, state: FSMContext, settings: Settings, session: AsyncSession
+):
     await state.clear()
+    admin_roles = await get_user_carwash_admin_roles(
+        session, user_id=callback.from_user.id
+    )
     keyboard = kb.get_main_keyboard(
-        callback.from_user.id, settings.admins_id, settings.webapp_url
+        user_id=callback.from_user.id,
+        system_admins=settings.admins_id,
+        webapp_url=settings.webapp_url,
+        carwash_admin_roles=admin_roles,
     )
     await callback.message.edit_text(
         "🚿 <b>Главное меню</b>\n\nВыберите действие:",
@@ -117,10 +132,15 @@ async def get_reg_name(message: Message, state: FSMContext):
 @router.message(
     StateFilter(UserStates.reg_phone), F.text.casefold() == "❌ отмена".casefold()
 )
-async def cancel_reg_phone(message: Message, state: FSMContext, settings: Settings):
+async def cancel_reg_phone(
+    message: Message, state: FSMContext, settings: Settings, session: AsyncSession
+):
     await state.clear()
+    admin_roles = await get_user_carwash_admin_roles(
+        session, user_id=message.from_user.id
+    )
     keyboard = kb.get_main_keyboard(
-        message.from_user.id, settings.admins_id, settings.webapp_url
+        message.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
     await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
     await message.answer("Выберите действие:", reply_markup=keyboard)
@@ -177,10 +197,15 @@ async def request_phone(callback: CallbackQuery, state: FSMContext):
     StateFilter(UserStates.waiting_for_phone),
     F.text.casefold() == "❌ отмена".casefold(),
 )
-async def cancel_waiting_phone(message: Message, state: FSMContext, settings: Settings):
+async def cancel_waiting_phone(
+    message: Message, state: FSMContext, settings: Settings, session: AsyncSession
+):
     await state.clear()
+    admin_roles = await get_user_carwash_admin_roles(
+        session, user_id=message.from_user.id
+    )
     keyboard = kb.get_main_keyboard(
-        message.from_user.id, settings.admins_id, settings.webapp_url
+        message.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
     await message.answer("❌ Отменено", reply_markup=ReplyKeyboardRemove())
     await message.answer("Выберите действие:", reply_markup=keyboard)
@@ -223,8 +248,11 @@ async def process_phone(
         )
 
     await state.clear()
+    admin_roles = await get_user_carwash_admin_roles(
+        session, user_id=message.from_user.id
+    )
     keyboard = kb.get_main_keyboard(
-        message.from_user.id, settings.admins_id, settings.webapp_url
+        message.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
     await message.answer("✅ Готово!\n\nВыберите действие:", reply_markup=keyboard)
 
@@ -383,10 +411,7 @@ async def cancel_booking_confirm(
 
 @router.callback_query(F.data.startswith("confirm_cancel_"))
 async def confirm_cancel_booking(
-    callback: CallbackQuery,
-    state: FSMContext,
-    settings: Settings,
-    api_client: ApiClient,
+    callback: CallbackQuery, state: FSMContext, settings: Settings, api_client: ApiClient, session: AsyncSession
 ):
     booking_id = callback.data.replace("confirm_cancel_", "")
 
@@ -396,9 +421,11 @@ async def confirm_cancel_booking(
         await callback.message.edit_text(
             f"✅ Бронь #{booking_id[:6]} отменена. Средства будут возвращены в ближайшее время."
         )
-
+        admin_roles = await get_user_carwash_admin_roles(
+            session, user_id=callback.from_user.id
+        )
         keyboard = kb.get_main_keyboard(
-            callback.from_user.id, settings.admins_id, settings.webapp_url
+            callback.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
         )
         await callback.message.answer("Выберите действие:", reply_markup=keyboard)
 
@@ -447,11 +474,14 @@ async def edit_profile_fallback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "cancel")
 async def cancel_handler(
-    callback: CallbackQuery, state: FSMContext, settings: Settings
+    callback: CallbackQuery, state: FSMContext, settings: Settings, session: AsyncSession
 ):
     await state.clear()
+    admin_roles = await get_user_carwash_admin_roles(
+        session, user_id=callback.from_user.id
+    )
     keyboard = kb.get_main_keyboard(
-        callback.from_user.id, settings.admins_id, settings.webapp_url
+        callback.from_user.id, settings.admins_id, settings.webapp_url, admin_roles
     )
     await callback.message.edit_text("Отменено", reply_markup=keyboard)
     await callback.answer()

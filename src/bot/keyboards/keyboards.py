@@ -1,8 +1,7 @@
 """
 Клавиатуры для Telegram бота CarWash
 """
-
-from typing import List
+from typing import List, Optional
 from datetime import date, timedelta
 
 from aiogram.types import (
@@ -13,23 +12,26 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-
-def is_admin(user_id: int, admin_ids: List[int]) -> bool:
-    return user_id in admin_ids
-
-
 def get_main_keyboard(
-    user_id: int, admin_ids: List[int] = None, webapp_url: str = None
+    user_id: int,
+    system_admins: Optional[List[int]] = None,
+    webapp_url: Optional[str] = None,
+    carwash_admin_roles: Optional[List] = None,
 ) -> InlineKeyboardMarkup:
-    admin_ids = admin_ids or []
+    """
+    Возвращает главную клавиатуру в зависимости от роли пользователя.
+    """
+    system_admins = system_admins or []
+    carwash_admin_roles = carwash_admin_roles or []
     buttons = []
 
+    # --- Кнопки для всех пользователей ---
     if webapp_url:
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text="🚗 Забронировать мойку",
-                    web_app=WebAppInfo(url=f"{webapp_url}?action=book"),
+                    text="📲 Забронировать (Mini App)",
+                    web_app=WebAppInfo(url=webapp_url),
                 )
             ]
         )
@@ -37,43 +39,60 @@ def get_main_keyboard(
         buttons.append(
             [InlineKeyboardButton(text="🚗 Найти мойку", callback_data="find_wash")]
         )
-
     buttons.extend(
         [
             [InlineKeyboardButton(text="📅 Мои брони", callback_data="my_bookings")],
-            [
-                InlineKeyboardButton(
-                    text="📍 Отправить геолокацию", callback_data="send_location"
-                )
-            ],
             [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
         ]
     )
 
-    if is_admin(user_id, admin_ids):
+    # --- Кнопки для администратора автомойки ---
+    if carwash_admin_roles:
+        buttons.append(
+            [InlineKeyboardButton(text="━━━ Админ мойки ━━━", callback_data="noop")]
+        )
+        for role in carwash_admin_roles:
+            # Предполагается, что в `role` есть объект `car_wash` с полями `id` и `name`
+            carwash = role.car_wash
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"🏢 {carwash.name}: Брони сегодня",
+                        callback_data=f"wa_today_{carwash.id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="📷 QR", callback_data=f"wa_scan_{carwash.id}"
+                    ),
+                ]
+            )
+
+    # --- Кнопки для системного администратора ---
+    if user_id in system_admins:
         buttons.extend(
             [
                 [
                     InlineKeyboardButton(
-                        text="━━━ Админ-панель ━━━", callback_data="noop"
+                        text="━━━ Системный админ ━━━", callback_data="noop"
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         text="➕ Добавить мойку", callback_data="add_wash"
-                    )
+                    ),
+                    InlineKeyboardButton(
+                        text="🗑 Удалить мойку", callback_data="del_wash"
+                    ),
                 ],
                 [
                     InlineKeyboardButton(
-                        text="🗑 Удалить мойку", callback_data="del_wash"
-                    )
+                        text="🧑‍💼 Управление админами", callback_data="manage_wash_admins"
+                    ),
+                    InlineKeyboardButton(text="📊 Статистика", callback_data="stats"),
                 ],
-                [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
             ]
         )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
 
 def get_contact_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(

@@ -40,6 +40,8 @@ class AdminWashStates(StatesGroup):
     adding_wash_phone = State()
     adding_wash_hours = State()
     adding_wash_location = State()
+    
+    adding_wash_admin_phone = State() 
 
     # Управление боксами
     adding_bay_number = State()

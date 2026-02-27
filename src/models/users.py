@@ -25,6 +25,8 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(onupdate=datetime.now, nullable=True)
 
     bookings: Mapped[List["Booking"]] = relationship(back_populates="user")
+    car_wash_admin_roles: Mapped[List["CarWashAdmin"]] = relationship(back_populates="user")
+
 
     def __repr__(self):
         return f"User(id={self.id}, username={self.username}, email={self.email})"

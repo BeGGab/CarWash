@@ -8,6 +8,7 @@ import httpx
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from src.bot.states import AdminWashStates
 from src.bot.utils.api_client import ApiClient
@@ -129,7 +130,9 @@ async def add_wash_hours(message: Message, state: FSMContext, api_client: ApiCli
         await message.answer("❌ Произошла непредвиденная ошибка. Попробуйте позже.")
 
     kb = get_main_keyboard(message.from_user.id, settings.admins_id)
-    await message.answer("Главное меню:", reply_markup=kb)
+    # В реальном приложении здесь нужно будет передать и роли админа мойки
+    # Для простоты пока оставляем так
+    await message.answer("Главное меню:", reply_markup=kb) 
 
 
 @router.callback_query(F.data == "del_wash")
@@ -155,8 +158,6 @@ async def del_wash_start(
             )
             await callback.answer()
             return
-
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
         buttons = []
         for w in washes:
@@ -204,6 +205,7 @@ async def del_wash_confirm(
         await api_client.delete_carwash(wash_id)
 
         await callback.message.edit_text(f"✅ Мойка успешно удалена.")
+        # Аналогично, здесь может потребоваться обновление ролей
         kb = get_main_keyboard(callback.from_user.id, settings.admins_id)
         await callback.message.answer("Главное меню:", reply_markup=kb)
 
@@ -246,3 +248,86 @@ async def show_stats(
     kb = get_back_keyboard("back_to_menu")
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
+
+
+# ==================== Управление админами моек ====================
+
+
+@router.callback_query(F.data == "manage_wash_admins")
+async def manage_wash_admins_start(
+    callback: CallbackQuery,
+    settings: Settings,
+    api_client: ApiClient,
+):
+    """Выбор мойки для управления администраторами"""
+    if callback.from_user.id not in settings.admins_id:
+        await callback.answer("❌ Нет доступа", show_alert=True)
+        return
+
+    washes = await api_client.get_carwashes()
+    if not washes:
+        await callback.message.edit_text(
+            "ℹ️ Сначала добавьте хотя бы одну автомойку.",
+            reply_markup=get_back_keyboard("back_to_menu"),
+        )
+        await callback.answer()
+        return
+
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"🧑‍💼 {w['name']}", callback_data=f"set_admin_{w['id']}"
+            )
+        ]
+        for w in washes
+    ]
+    buttons.append(
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu")]
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(
+        "Выберите мойку для назначения администратора:", reply_markup=kb
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("set_admin_"))
+async def set_admin_for_wash(callback: CallbackQuery, state: FSMContext):
+    """Начало процесса назначения админа"""
+    carwash_id = callback.data.replace("set_admin_", "")
+    await state.set_state(AdminWashStates.adding_wash_admin_phone)
+    await state.update_data(carwash_id=carwash_id)
+    await callback.message.edit_text(
+        "📞 Введите номер телефона пользователя, которого хотите сделать "
+        "администратором этой мойки (формат +7XXXXXXXXXX).\n\n"
+        "Пользователь должен быть зарегистрирован в боте."
+    )
+    await callback.answer()
+
+
+@router.message(AdminWashStates.adding_wash_admin_phone)
+async def add_wash_admin_phone(
+    message: Message, state: FSMContext, api_client: ApiClient, settings: Settings
+):
+    """Добавление админа по номеру телефона"""
+    phone = message.text.strip()
+    if not phone.startswith("+7") or len(phone) != 12:
+        await message.answer("❌ Неверный формат. Используйте +7XXXXXXXXXX:")
+        return
+
+    data = await state.get_data()
+    carwash_id = data.get("carwash_id")
+
+    try:
+        await api_client.add_carwash_admin(carwash_id, phone)
+        await message.answer(f"✅ Пользователь с номером {phone} назначен администратором.")
+    except httpx.HTTPStatusError as e:
+        detail = e.response.json().get("detail", "Неизвестная ошибка API")
+        await message.answer(f"❌ Ошибка: {detail}")
+    except Exception as e:
+        logger.error(f"Error adding carwash admin: {e}")
+        await message.answer("❌ Произошла непредвиденная ошибка.")
+    finally:
+        await state.clear()
+        kb = get_main_keyboard(message.from_user.id, settings.admins_id)
+        await message.answer("Главное меню:", reply_markup=kb)
